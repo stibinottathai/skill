@@ -23,6 +23,7 @@ import { SessionFormModal } from "@/components/sessions/session-form-modal";
 import { NoteFormModal } from "@/components/notes/note-form-modal";
 import { Dialog } from "@/components/ui/dialog";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { RoadmapTab } from "@/components/skills/roadmap-tab";
 import {
   ArrowLeft,
   Calendar,
@@ -57,8 +58,8 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
   const [loadingSkill, setLoadingSkill] = useState(true);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Active Tab: "sessions" | "notes"
-  const [activeTab, setActiveTab] = useState<"sessions" | "notes">("sessions");
+  // Active Tab: "roadmap" | "sessions" | "notes"
+  const [activeTab, setActiveTab] = useState<"roadmap" | "sessions" | "notes">("roadmap");
 
   // Form modal states
   const [isSessionFormOpen, setIsSessionFormOpen] = useState(false);
@@ -357,11 +358,23 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
       {/* Tabs Selection Bar */}
       <div className="flex border-b border-zinc-200 dark:border-zinc-800 pb-px">
         <button
+          onClick={() => setActiveTab("roadmap")}
+          className={cn(
+            "flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer",
+            activeTab === "roadmap"
+              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+              : "border-transparent text-zinc-550 hover:text-zinc-900 dark:text-zinc-450 dark:hover:text-zinc-200"
+          )}
+        >
+          <Award className="h-4 w-4" />
+          Roadmap
+        </button>
+        <button
           onClick={() => setActiveTab("sessions")}
           className={cn(
             "flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer",
             activeTab === "sessions"
-              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+              ? "border-indigo-600 text-indigo-650 dark:border-indigo-400 dark:text-indigo-400"
               : "border-transparent text-zinc-550 hover:text-zinc-900 dark:text-zinc-450 dark:hover:text-zinc-200"
           )}
         >
@@ -383,8 +396,11 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
       </div>
 
       {/* Tab Panels */}
-      {activeTab === "sessions" ? (
-        /* SESSIONS TAB */
+      {activeTab === "roadmap" && (
+        <RoadmapTab skill={skill} sessions={sessions} />
+      )}
+
+      {activeTab === "sessions" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-55">Learning Logs</h3>
@@ -503,8 +519,9 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
             </div>
           )}
         </div>
-      ) : (
-        /* NOTES TAB */
+      )}
+
+      {activeTab === "notes" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-55">Cheat Sheets & Notes</h3>
@@ -537,7 +554,7 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
                         <FileText className="h-4.5 w-4.5 text-indigo-500 shrink-0" />
                         <div>
                           <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">{note.title}</h4>
-                          <span className="text-[9px] text-zinc-400">Updated {formatDate(note.updatedAt)}</span>
+                          <span className="text-[9px] text-zinc-400 font-semibold block mt-0.5">Updated {formatDate(note.updatedAt)}</span>
                         </div>
                       </div>
 
@@ -548,13 +565,13 @@ export function SkillDetailShell({ id }: SkillDetailShellProps) {
                               setSelectedNote(note);
                               setIsNoteFormOpen(true);
                             }}
-                            className="p-1 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer"
+                            className="p-1 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 text-zinc-550 hover:text-zinc-900 transition-colors cursor-pointer"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => setDeleteTargetNoteId(note.id)}
-                            className="p-1 rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                            className="p-1 rounded-md border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 transition-colors cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>

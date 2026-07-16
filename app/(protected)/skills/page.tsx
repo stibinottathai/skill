@@ -10,6 +10,11 @@ import {
   deleteSkill,
   archiveSkill,
 } from "@/services/skills";
+import {
+  applyRoadmapTemplate,
+  duplicateRoadmap,
+  generateAIRoadmap,
+} from "@/services/roadmap";
 import { Skill } from "@/types/skill";
 import { SkillCard } from "@/components/skills/skill-card";
 import { SkillFormModal } from "@/components/skills/skill-form-modal";
@@ -112,7 +117,12 @@ export default function SkillsPage() {
 
   // CRUD handlers
   const handleAddOrEditSubmit = async (
-    values: Omit<Skill, "id" | "userId" | "createdAt" | "updatedAt">
+    values: Omit<Skill, "id" | "userId" | "createdAt" | "updatedAt">,
+    roadmapInit?: {
+      type: "empty" | "template" | "duplicate" | "ai";
+      templateKey?: string;
+      duplicateSkillId?: string;
+    }
   ) => {
     if (!user) return;
 
@@ -123,7 +133,19 @@ export default function SkillsPage() {
         showToast(`Successfully updated "${values.name}"!`, "success");
       } else {
         // Create Action
-        await createSkill(user.uid, values);
+        const newSkillId = await createSkill(user.uid, values);
+
+        // Apply selected roadmap initialization
+        if (roadmapInit) {
+          if (roadmapInit.type === "template" && roadmapInit.templateKey) {
+            await applyRoadmapTemplate(user.uid, newSkillId, roadmapInit.templateKey);
+          } else if (roadmapInit.type === "duplicate" && roadmapInit.duplicateSkillId) {
+            await duplicateRoadmap(user.uid, roadmapInit.duplicateSkillId, newSkillId);
+          } else if (roadmapInit.type === "ai") {
+            await generateAIRoadmap(user.uid, newSkillId, values.name);
+          }
+        }
+
         showToast(`Successfully created "${values.name}"!`, "success");
       }
     } catch (err: any) {
@@ -377,6 +399,7 @@ export default function SkillsPage() {
         }}
         onSubmit={handleAddOrEditSubmit}
         skill={selectedSkill}
+        skills={skills}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -45,13 +45,26 @@ type SkillFormValues = z.infer<typeof skillFormSchema>;
 interface SkillFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (values: Omit<Skill, "id" | "userId" | "createdAt" | "updatedAt">) => Promise<void>;
+  onSubmit: (
+    values: Omit<Skill, "id" | "userId" | "createdAt" | "updatedAt">,
+    roadmapInit?: {
+      type: "empty" | "template" | "duplicate" | "ai";
+      templateKey?: string;
+      duplicateSkillId?: string;
+    }
+  ) => Promise<void>;
   skill?: Skill | null; // Prefilled if editing
+  skills?: Skill[]; // List of other skills to copy roadmaps from
 }
 
-export function SkillFormModal({ open, onClose, onSubmit, skill }: SkillFormModalProps) {
+export function SkillFormModal({ open, onClose, onSubmit, skill, skills }: SkillFormModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [showCustomCategory, setShowCustomCategory] = useState(false);
+
+  // Roadmap initialization states
+  const [roadmapInitType, setRoadmapInitType] = useState<"empty" | "template" | "duplicate" | "ai">("empty");
+  const [roadmapTemplateKey, setRoadmapTemplateKey] = useState<string>("python");
+  const [roadmapDuplicateSkillId, setRoadmapDuplicateSkillId] = useState<string>("");
 
   const defaultValues: Partial<SkillFormValues> = {
     name: "",
@@ -110,6 +123,10 @@ export function SkillFormModal({ open, onClose, onSubmit, skill }: SkillFormModa
         });
       } else {
         reset(defaultValues);
+        // Reset roadmap states for new skills
+        setRoadmapInitType("empty");
+        setRoadmapTemplateKey("python");
+        setRoadmapDuplicateSkillId("");
       }
     }
   }, [open, skill, reset]);
@@ -121,10 +138,19 @@ export function SkillFormModal({ open, onClose, onSubmit, skill }: SkillFormModa
       
       const { customCategory, ...submissionValues } = values;
 
-      await onSubmit({
-        ...submissionValues,
-        category: finalCategory,
-      });
+      await onSubmit(
+        {
+          ...submissionValues,
+          category: finalCategory,
+        },
+        !skill
+          ? {
+              type: roadmapInitType,
+              templateKey: roadmapTemplateKey,
+              duplicateSkillId: roadmapDuplicateSkillId,
+            }
+          : undefined
+      );
       onClose();
       reset();
     } catch (error) {
@@ -340,6 +366,64 @@ export function SkillFormModal({ open, onClose, onSubmit, skill }: SkillFormModa
             {errors.progress && <p className="text-[10px] font-bold text-red-500">{errors.progress.message}</p>}
           </div>
         </div>
+
+        {/* Roadmap initialization selector (only for creating new skills) */}
+        {!skill && (
+          <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl dark:bg-zinc-900/60 dark:border-zinc-800 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                Roadmap Setup
+              </label>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                Initialize this skill with a pre-configured learning path.
+              </p>
+              <select
+                value={roadmapInitType}
+                onChange={(e) => setRoadmapInitType(e.target.value as any)}
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-sm dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden mt-1 font-semibold"
+              >
+                <option value="empty">Start with an empty roadmap</option>
+                <option value="template">Use a predefined template</option>
+                <option value="duplicate">Duplicate from an existing skill's roadmap</option>
+                <option value="ai">Generate Roadmap with AI (Simulated)</option>
+              </select>
+            </div>
+
+            {roadmapInitType === "template" && (
+              <div className="space-y-1 animate-slide-down">
+                <label className="text-xs font-bold text-zinc-650 dark:text-zinc-400">Select Template</label>
+                <select
+                  value={roadmapTemplateKey}
+                  onChange={(e) => setRoadmapTemplateKey(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-zinc-200 bg-white text-xs dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
+                >
+                  <option value="python">Python Basics to FastAPI</option>
+                  <option value="nextjs">Next.js 15 App Router</option>
+                  <option value="react">React Core Fundamentals</option>
+                  <option value="ai_engineering">AI Engineering & Agents</option>
+                </select>
+              </div>
+            )}
+
+            {roadmapInitType === "duplicate" && (
+              <div className="space-y-1 animate-slide-down">
+                <label className="text-xs font-bold text-zinc-650 dark:text-zinc-400">Copy Roadmap From</label>
+                <select
+                  value={roadmapDuplicateSkillId}
+                  onChange={(e) => setRoadmapDuplicateSkillId(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-zinc-200 bg-white text-xs dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
+                >
+                  <option value="">-- Choose a Skill --</option>
+                  {skills?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex justify-end gap-2.5 pt-4 border-t border-zinc-200 dark:border-zinc-800 mt-6">

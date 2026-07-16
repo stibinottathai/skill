@@ -33,6 +33,7 @@ interface SessionFormModalProps {
   skills: Skill[];
   session?: LearningSession | null; // Prefilled if editing
   prefilledSkillId?: string; // Prefilled if opening from a specific Skill Detail Page
+  prefilledTopic?: string; // Prefilled topic learned from roadmap
 }
 
 export function SessionFormModal({
@@ -42,6 +43,7 @@ export function SessionFormModal({
   skills,
   session,
   prefilledSkillId,
+  prefilledTopic,
 }: SessionFormModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [notesTab, setNotesTab] = useState<"write" | "preview">("write");
@@ -59,7 +61,7 @@ export function SessionFormModal({
     skillId: prefilledSkillId || "",
     date: getTodayString(),
     duration: 30,
-    topicLearned: "",
+    topicLearned: prefilledTopic || "",
     summary: "",
     notes: "",
     difficulty: "Medium",
@@ -105,10 +107,11 @@ export function SessionFormModal({
         reset({
           ...defaultValues,
           skillId: prefilledSkillId || (skills.length > 0 ? skills[0].id : ""),
+          topicLearned: prefilledTopic || "",
         });
       }
     }
-  }, [open, session, prefilledSkillId, skills, reset]);
+  }, [open, session, prefilledSkillId, prefilledTopic, skills, reset]);
 
   const handleFormSubmit = async (values: SessionFormValues) => {
     setSubmitting(true);

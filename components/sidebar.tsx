@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Sun,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -26,6 +28,8 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
   const pathname = usePathname();
 
   const menuItems = [
+    { name: "Today", href: "/today", icon: Sun },
+    { name: "Tasks", href: "/tasks", icon: ListTodo },
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Skills", href: "/skills", icon: GraduationCap },
     { name: "Learning Sessions", href: "/learning-sessions", icon: Clock },

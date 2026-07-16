@@ -8,6 +8,11 @@ import { subscribeUserSettings } from "@/services/settings";
 import { Skill } from "@/types/skill";
 import { LearningSession } from "@/types/session";
 import { UserSettings } from "@/types/settings";
+import { LearningTask } from "@/types/task";
+import { RoadmapItem } from "@/types/roadmap";
+import { subscribeTasks } from "@/services/tasks";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 // Icon imports
 import {
@@ -23,6 +28,7 @@ import {
   TrendingUp,
   BrainCircuit,
   Eye,
+  ListTodo,
 } from "lucide-react";
 import Link from "next/link";
 import * as LucideIcons from "lucide-react";
@@ -55,6 +61,10 @@ export default function DashboardPage() {
   // Selected session for detailed viewer modal
   const [selectedActivity, setSelectedActivity] = useState<LearningSession | null>(null);
 
+  // Planner and Tasks states
+  const [tasks, setTasks] = useState<LearningTask[]>([]);
+  const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>([]);
+
   // Subscriptions
   useEffect(() => {
     if (!user) return;
@@ -74,10 +84,26 @@ export default function DashboardPage() {
       setLoading(false);
     });
 
+    const unsubscribeTasks = subscribeTasks(user.uid, (fetchedTasks) => {
+      setTasks(fetchedTasks);
+    });
+
+    // Real-time listener for all roadmap items across skills
+    const roadmapQ = query(collection(db, "roadmap_items"), where("userId", "==", user.uid));
+    const unsubscribeRoadmap = onSnapshot(roadmapQ, (snap) => {
+      const items = snap.docs.map((docSnap: any) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }) as RoadmapItem);
+      setRoadmapItems(items);
+    });
+
     return () => {
       unsubscribeSkills();
       unsubscribeSessions();
       unsubscribeSettings();
+      unsubscribeTasks();
+      unsubscribeRoadmap();
     };
   }, [user]);
 
@@ -219,6 +245,25 @@ export default function DashboardPage() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 4);
   }, [sessions]);
+
+  // Compute Next Roadmap Topic and Recently Completed Topics
+  const nextRoadmapTopic = useMemo(() => {
+    // Find next unfinished or in progress item
+    const incomplete = roadmapItems.filter(
+      (item) => item.status === "Not Started" || item.status === "In Progress"
+    );
+    if (incomplete.length === 0) return null;
+    
+    // Sort: item order asc
+    return incomplete.sort((a, b) => a.order - b.order)[0];
+  }, [roadmapItems]);
+
+  const recentlyCompletedTopics = useMemo(() => {
+    return roadmapItems
+      .filter((item) => item.status === "Completed" && item.completionDate)
+      .sort((a, b) => new Date(b.completionDate!).getTime() - new Date(a.completionDate!).getTime())
+      .slice(0, 3);
+  }, [roadmapItems]);
 
   if (loading) {
     return (
@@ -505,6 +550,107 @@ export default function DashboardPage() {
                 No sessions logged yet. Click "Start Study Log" to add one!
               </div>
             )}
+          </div>
+
+          {/* Planner & Task Dashboard Widgets */}
+          <div className="grid gap-6 md:grid-cols-2">
+            
+            {/* Widget 1: Today's Tasks & Deadlines */}
+            <div className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-55 flex items-center gap-1.5 uppercase tracking-wider">
+                  <ListTodo className="h-4.5 w-4.5 text-indigo-500" />
+                  Today's Tasks & Deadlines
+                </h4>
+                <Link href="/tasks" className="text-[10px] font-bold text-indigo-650 hover:text-indigo-500 dark:text-indigo-400">
+                  Manage Tasks
+                </Link>
+              </div>
+
+              {/* Tasks List */}
+              {tasks.filter((t) => !t.archived && t.status !== "Completed").length > 0 ? (
+                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                  {tasks
+                    .filter((t) => !t.archived && t.status !== "Completed")
+                    .slice(0, 5)
+                    .map((t) => (
+                      <div key={t.id} className="flex items-center justify-between p-2.5 bg-zinc-50/50 dark:bg-zinc-955/20 border border-zinc-200 dark:border-zinc-850 rounded-xl">
+                        <div className="min-w-0 flex-1 pr-3">
+                          <span className="text-xs font-bold text-zinc-850 dark:text-zinc-150 block truncate">
+                            {t.title}
+                          </span>
+                          <span className="text-[9px] font-semibold text-zinc-450 dark:text-zinc-500 mt-0.5 block">
+                            Category: {t.category} • Priority: {t.priority} {t.dueDate ? `• Due: ${t.dueDate}` : ""}
+                          </span>
+                        </div>
+                        <span className={cn(
+                          "text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0",
+                          t.status === "Todo" && "bg-zinc-100 text-zinc-650 dark:bg-zinc-800 dark:text-zinc-400",
+                          t.status === "In Progress" && "bg-indigo-50 text-indigo-750 dark:bg-indigo-950/20 dark:text-indigo-400"
+                        )}>
+                          {t.status}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-450 italic text-center py-6">All tasks completed or none added!</p>
+              )}
+            </div>
+
+            {/* Widget 2: Roadmap Tracking */}
+            <div className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs space-y-4">
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-55 flex items-center gap-1.5 uppercase tracking-wider">
+                <Award className="h-4.5 w-4.5 text-indigo-500" />
+                Roadmap Curriculum
+              </h4>
+
+              <div className="space-y-4">
+                {/* Next Unfinished Roadmap Item */}
+                <div>
+                  <h5 className="text-[9px] font-extrabold uppercase text-zinc-400 dark:text-zinc-550 tracking-wider mb-2">Next Unfinished Topic</h5>
+                  {nextRoadmapTopic ? (
+                    <div className="p-3 bg-indigo-50/25 border border-indigo-100/30 dark:bg-indigo-950/10 dark:border-indigo-900/30 rounded-xl flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-zinc-850 dark:text-zinc-200 block truncate">
+                          {nextRoadmapTopic.title}
+                        </span>
+                        <span className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 block mt-0.5">
+                          From Skill: {skillMap.get(nextRoadmapTopic.skillId)?.name || "Active"}
+                        </span>
+                      </div>
+                      <Link
+                        href={`/skills/${nextRoadmapTopic.skillId}`}
+                        className="flex items-center gap-1 text-[10px] font-bold text-indigo-650 hover:underline dark:text-indigo-400 shrink-0"
+                      >
+                        Study
+                        <ChevronRight className="h-3 w-3" />
+                      </Link>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-450 italic py-1">No upcoming roadmap topics.</p>
+                  )}
+                </div>
+
+                {/* Recently Completed Roadmap Topics */}
+                <div>
+                  <h5 className="text-[9px] font-extrabold uppercase text-zinc-400 dark:text-zinc-550 tracking-wider mb-2">Recently Completed Topics</h5>
+                  {recentlyCompletedTopics.length > 0 ? (
+                    <div className="space-y-2">
+                      {recentlyCompletedTopics.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center text-xs p-2 bg-zinc-50/50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                          <span className="font-bold text-zinc-850 dark:text-zinc-200 truncate pr-3">{item.title}</span>
+                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-450 shrink-0">✓ Completed</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-450 italic py-1">No completed topics logged yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

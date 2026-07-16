@@ -123,7 +123,7 @@ export async function generateDailyPlanSuggestions(
   
   const activeSkills = skillsSnap.docs
     .map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() }))
-    .filter((s: any) => s.status === "Learning" || s.status === "Practicing" || s.status === "Planned") as Skill[];
+    .filter((s: any) => s.status !== "Completed" && s.status !== "Archived") as Skill[];
     
   if (activeSkills.length === 0) return [];
 
@@ -166,8 +166,10 @@ export async function generateDailyPlanSuggestions(
 
   for (const item of sortedItems) {
     const studyTime = item.estimatedStudyTime || 30;
-    if (accumulatedTime + studyTime > availableMinutes) {
-      // If adding this exceeds capacity, skip or break
+    
+    // Always suggest at least one item, even if it exceeds availableMinutes
+    if (suggestions.length > 0 && accumulatedTime + studyTime > availableMinutes) {
+      // If adding this exceeds capacity, skip
       continue;
     }
 

@@ -91,6 +91,17 @@ export function DashboardCalendar({ sessions, skills }: DashboardCalendarProps) 
     return sessionsByDate[selectedDateStr] || [];
   }, [selectedDateStr, sessionsByDate]);
 
+  const getTooltipContent = (dateStr: string | null) => {
+    if (!dateStr || !sessionsByDate[dateStr]) return "";
+    const daySessions = sessionsByDate[dateStr] || [];
+    const lines = ["STUDY SESSIONS LOGGED:"];
+    daySessions.forEach((s) => {
+      const skillName = skillMap.get(s.skillId)?.name || "Skill";
+      lines.push(`• [${skillName}] ${s.topicLearned} (${s.duration}m)`);
+    });
+    return lines.join("\n");
+  };
+
   return (
     <div className="space-y-6">
       {/* Calendar Grid Container */}
@@ -152,6 +163,7 @@ export function DashboardCalendar({ sessions, skills }: DashboardCalendarProps) 
                     setSelectedDateStr(cell.dateStr);
                   }
                 }}
+                title={getTooltipContent(cell.dateStr)}
                 className={cn(
                   "min-h-[56px] p-1.5 rounded-xl border transition-all duration-200 relative flex flex-col justify-between border-transparent",
                   cell.day ? "bg-zinc-50/50 dark:bg-zinc-950/20" : "bg-transparent opacity-0 pointer-events-none",

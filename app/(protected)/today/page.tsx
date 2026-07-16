@@ -444,7 +444,7 @@ export default function TodayPage() {
 
         <div className="p-4.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs">
           <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider block">Time remaining</span>
-          <span className="text-xl font-extrabold text-indigo-650 dark:text-indigo-400 mt-1 block leading-none">
+          <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1 block leading-none">
             {dailyMetrics.remainingMinutes} mins
           </span>
         </div>
@@ -485,7 +485,7 @@ export default function TodayPage() {
                 setSelectedPlanItem(null);
                 setIsEditOpen(true);
               }}
-              className="flex items-center gap-1 text-xs font-bold text-indigo-650 hover:text-indigo-500 dark:text-indigo-400 cursor-pointer"
+              className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Item
@@ -605,7 +605,7 @@ export default function TodayPage() {
                   setSelectedPlanItem(null);
                   setIsEditOpen(true);
                 }}
-                className="flex items-center justify-center gap-2 h-9 px-4 rounded-xl bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs shadow-xs cursor-pointer"
+                className="flex items-center justify-center gap-2 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
                 Add First Item
@@ -666,7 +666,7 @@ export default function TodayPage() {
                 onClick={handleToggleTimer}
                 className={cn(
                   "flex h-10 w-24 items-center justify-center gap-1.5 rounded-xl font-bold text-xs text-white shadow-xs cursor-pointer active:scale-95 transition-all",
-                  isPomodoroActive ? "bg-amber-600 hover:bg-amber-500" : "bg-indigo-650 hover:bg-indigo-600"
+                  isPomodoroActive ? "bg-amber-600 hover:bg-amber-500" : "bg-indigo-600 hover:bg-indigo-500"
                 )}
               >
                 {isPomodoroActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -674,7 +674,7 @@ export default function TodayPage() {
               </button>
               <button
                 onClick={handleResetTimer}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-850 cursor-pointer"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 cursor-pointer"
               >
                 <RotateCcw className="h-4.5 w-4.5 text-zinc-450" />
               </button>

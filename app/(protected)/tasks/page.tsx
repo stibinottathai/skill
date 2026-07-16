@@ -460,6 +460,29 @@ export default function TasksPage() {
     return calendarAggr[selectedCalendarDateStr] || { tasks: [], plans: [], sessions: [] };
   }, [selectedCalendarDateStr, calendarAggr]);
 
+  const getTooltipContent = (dateStr: string | null) => {
+    if (!dateStr || !calendarAggr[dateStr]) return "";
+    const dayAggr = calendarAggr[dateStr];
+    const lines: string[] = [];
+
+    if (dayAggr.tasks.length > 0) {
+      lines.push("TASKS DUE:");
+      dayAggr.tasks.forEach((t) => lines.push(`• ${t.title} [${t.category}]`));
+    }
+    if (dayAggr.plans.length > 0) {
+      if (lines.length > 0) lines.push("");
+      lines.push("DAILY PLANS:");
+      dayAggr.plans.forEach((p) => lines.push(`• ${p.title} (${p.estimatedDuration}m)`));
+    }
+    if (dayAggr.sessions.length > 0) {
+      if (lines.length > 0) lines.push("");
+      lines.push("STUDY LOGS:");
+      dayAggr.sessions.forEach((s) => lines.push(`• ${s.topicLearned} (${s.duration}m)`));
+    }
+
+    return lines.join("\n");
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       
@@ -904,6 +927,7 @@ export default function TasksPage() {
                         setSelectedCalendarDateStr(cell.dateStr);
                       }
                     }}
+                    title={getTooltipContent(cell.dateStr)}
                     className={cn(
                       "min-h-[64px] p-2 rounded-xl border relative flex flex-col justify-between border-transparent",
                       cell.day ? "bg-zinc-50/50 dark:bg-zinc-950/20" : "bg-transparent opacity-0 pointer-events-none",

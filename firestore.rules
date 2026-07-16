@@ -4,49 +4,51 @@ service cloud.firestore {
     
     // Helper to verify user matches admin email constraint
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'stibinaugustine3047@gmail.com';
+      return request.auth != null && 
+        'email' in request.auth.token && 
+        request.auth.token.email.lower() == 'stibinaugustine3047@gmail.com';
     }
 
     // Skills rules
     match /skills/{skillId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Learning Sessions rules
     match /learning_sessions/{sessionId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Notes rules
     match /skill_notes/{noteId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Roadmap items rules
     match /roadmap_items/{itemId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Daily plans rules
     match /daily_plans/{planId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Tasks rules
     match /tasks/{taskId} {
-      allow read, write: if isAdmin() && 
-        (resource == null || resource.data.userId == request.auth.uid) && 
-        (request.method == 'DELETE' || request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() && resource.data.userId == request.auth.uid;
+      allow create, update: if isAdmin() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.userId == request.auth.uid;
     }
 
     // Settings rules

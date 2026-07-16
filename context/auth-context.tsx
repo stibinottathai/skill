@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser && currentUser.email !== ALLOWED_EMAIL) {
+      if (currentUser && currentUser.email?.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
         // Force sign out immediately
         await signOut(auth);
         setUser(null);
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);
       const email = userCredential.user.email;
-      if (email !== ALLOWED_EMAIL) {
+      if (email?.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
         await signOut(auth);
         throw new Error("Unauthorized account. This application is restricted to the administrator only.");
       }

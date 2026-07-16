@@ -22,9 +22,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const ALLOWED_EMAIL = "stibinaugustine3047@gmail.com";
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser && currentUser.email !== ALLOWED_EMAIL) {
+        // Force sign out immediately
+        await signOut(auth);
+        setUser(null);
+      } else {
+        setUser(currentUser);
+      }
       setLoading(false);
     });
 
@@ -34,7 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async () => {
     setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const email = userCredential.user.email;
+      if (email !== ALLOWED_EMAIL) {
+        await signOut(auth);
+        throw new Error("Unauthorized account. This application is restricted to the administrator only.");
+      }
     } catch (error) {
       console.error("Error signing in with Google:", error);
       setLoading(false);

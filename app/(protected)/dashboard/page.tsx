@@ -397,7 +397,7 @@ export default function DashboardPage() {
           )}
         >
           <Calendar className="h-4 w-4" />
-          Calendar Calendar
+          Calendar
         </button>
         <button
           onClick={() => setActiveTab("insights")}

@@ -69,6 +69,31 @@ export function subscribeDailyPlan(
 }
 
 /**
+ * Subscribes to all daily planner items for a user across all dates (for calendar display)
+ */
+export function subscribeAllDailyPlans(
+  userId: string,
+  callback: (items: DailyPlanItem[]) => void
+) {
+  const colRef = collection(db, PLANNER_COLLECTION);
+  const q = query(
+    colRef,
+    where("userId", "==", userId)
+  );
+
+  return onSnapshot(
+    q,
+    (querySnapshot) => {
+      const items = querySnapshot.docs.map(formatFirestoreDoc);
+      callback(items);
+    },
+    (error) => {
+      console.error("Error subscribing to all daily plans: ", error);
+    }
+  );
+}
+
+/**
  * Create a daily plan item
  */
 export async function createDailyPlanItem(

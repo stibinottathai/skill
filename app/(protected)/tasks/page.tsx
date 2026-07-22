@@ -26,6 +26,7 @@ import { LearningSession } from "@/types/session";
 import { LearningTask, TaskCategory, TaskPriority, TaskStatus } from "@/types/task";
 import { DailyPlanItem } from "@/types/planner";
 import { Dialog } from "@/components/ui/dialog";
+import { ScheduleLearningModal } from "@/components/planner/schedule-learning-modal";
 import {
   Plus,
   Search,
@@ -109,6 +110,10 @@ export default function TasksPage() {
   // Calendar Date state
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   const [selectedCalendarDateStr, setSelectedCalendarDateStr] = useState<string | null>(null);
+
+  // Schedule Learning Modal State
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleModalDate, setScheduleModalDate] = useState<string | undefined>(undefined);
 
   // Drag and Drop ordering state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -923,15 +928,15 @@ export default function TasksPage() {
                   <div
                     key={idx}
                     onClick={() => {
-                      if (cell.dateStr && hasActivities) {
+                      if (cell.dateStr) {
                         setSelectedCalendarDateStr(cell.dateStr);
                       }
                     }}
                     title={getTooltipContent(cell.dateStr)}
                     className={cn(
-                      "min-h-[64px] p-2 rounded-xl border relative flex flex-col justify-between border-transparent",
-                      cell.day ? "bg-zinc-50/50 dark:bg-zinc-950/20" : "bg-transparent opacity-0 pointer-events-none",
-                      hasActivities ? "cursor-pointer hover:border-zinc-250 dark:hover:border-zinc-800 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-850/80 hover:shadow-xs" : "",
+                      "min-h-[64px] p-2 rounded-xl border relative flex flex-col justify-between border-transparent transition-all cursor-pointer",
+                      cell.day ? "bg-zinc-50/50 dark:bg-zinc-950/20 hover:border-zinc-250 dark:hover:border-zinc-800 hover:shadow-xs" : "bg-transparent opacity-0 pointer-events-none",
+                      hasActivities ? "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-850/80" : "",
                       isSelected ? "ring-2 ring-indigo-500 border-transparent dark:ring-indigo-400" : ""
                     )}
                   >
@@ -960,10 +965,26 @@ export default function TasksPage() {
           {/* Selected Calendar Day Activities details */}
           {selectedCalendarDateStr && selectedDateActivities && (
             <div className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  Activities on {new Date(selectedCalendarDateStr).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    Activities on {new Date(selectedCalendarDateStr + "T00:00:00").toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </h4>
+                  <span className="text-[10px] text-zinc-400 font-semibold">
+                    {selectedDateActivities.plans.length} scheduled plans • {selectedDateActivities.tasks.length} tasks due • {selectedDateActivities.sessions.length} completed sessions
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setScheduleModalDate(selectedCalendarDateStr);
+                    setIsScheduleModalOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95 transition-all shrink-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Schedule Learning for this Date
+                </button>
               </div>
 
               {/* Tasks list */}
@@ -1169,6 +1190,14 @@ export default function TasksPage() {
 
         </form>
       </Dialog>
+
+      {/* SCHEDULE LEARNING MODAL FOR FUTURE DATES */}
+      <ScheduleLearningModal
+        open={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        initialDate={scheduleModalDate}
+        skills={skills}
+      />
 
     </div>
   );

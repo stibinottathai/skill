@@ -16,7 +16,7 @@ import { Skill } from "@/types/skill";
 import { DailyPlanItem, DailyPlanStatus, DailyPlanPriority } from "@/types/planner";
 import { UserSettings } from "@/types/settings";
 import { Dialog } from "@/components/ui/dialog";
-import { SessionFormModal } from "@/components/sessions/session-form-modal";
+import { ScheduleLearningModal } from "@/components/planner/schedule-learning-modal";
 import {
   Sun,
   CheckCircle2,
@@ -36,6 +36,7 @@ import {
   AlertCircle,
   Calendar,
   Timer,
+  ChevronLeft,
   ChevronRight,
   PlusCircle,
 } from "lucide-react";
@@ -90,17 +91,6 @@ export default function TodayPage() {
   const [suggestedItems, setSuggestedItems] = useState<Omit<DailyPlanItem, "id" | "userId" | "createdAt" | "updatedAt">[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
 
-  // Pomodoro states
-  const [pomodoroMode, setPomodoroMode] = useState<"work" | "break">("work");
-  const [pomodoroMinutes, setPomodoroMinutes] = useState(25);
-  const [pomodoroSeconds, setPomodoroSeconds] = useState(0);
-  const [isPomodoroActive, setIsPomodoroActive] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Study log modal prompt after pomodoro completion
-  const [isPomodoroLogOpen, setIsPomodoroLogOpen] = useState(false);
-  const [completedPomodoroDuration, setCompletedPomodoroDuration] = useState(25);
-
   // Get current date string representation (YYYY-MM-DD)
   const getTodayString = () => {
     const today = new Date();
@@ -138,6 +128,33 @@ export default function TodayPage() {
     },
   });
 
+  // Selected date state (defaults to today)
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(getTodayString());
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+
+  const isSelectedDateToday = selectedDateStr === todayStr;
+
+  const navigateDay = (direction: -1 | 1) => {
+    const parts = selectedDateStr.split("-").map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() + direction);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    setSelectedDateStr(`${yyyy}-${mm}-${dd}`);
+  };
+
+  const formattedSelectedDate = useMemo(() => {
+    const parts = selectedDateStr.split("-").map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    return d.toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, [selectedDateStr]);
+
   // Load subscriptions
   useEffect(() => {
     if (!user) return;
@@ -147,7 +164,7 @@ export default function TodayPage() {
       setSkills(fetchedSkills);
     });
 
-    const unsubscribePlan = subscribeDailyPlan(user.uid, todayStr, (fetchedPlan) => {
+    const unsubscribePlan = subscribeDailyPlan(user.uid, selectedDateStr, (fetchedPlan) => {
       setDailyPlan(fetchedPlan);
     });
 
@@ -161,7 +178,7 @@ export default function TodayPage() {
       unsubscribePlan();
       unsubscribeSettings();
     };
-  }, [user, todayStr]);
+  }, [user, selectedDateStr]);
 
   // Sync Form when selectedItem changes
   useEffect(() => {
@@ -258,10 +275,10 @@ export default function TodayPage() {
       } else {
         await createDailyPlanItem(user.uid, {
           ...sanitizedItem,
-          date: todayStr,
+          date: selectedDateStr,
           status: "Pending",
         });
-        showToast("Added item to today's learning plan!", "success");
+        showToast(`Added item to learning plan for ${selectedDateStr}!`, "success");
       }
       setIsEditOpen(false);
       setSelectedPlanItem(null);
@@ -309,85 +326,6 @@ export default function TodayPage() {
     }
   };
 
-  // Pomodoro Actions
-  useEffect(() => {
-    if (isPomodoroActive) {
-      timerRef.current = setInterval(() => {
-        if (pomodoroSeconds > 0) {
-          setPomodoroSeconds(pomodoroSeconds - 1);
-        } else if (pomodoroSeconds === 0) {
-          if (pomodoroMinutes > 0) {
-            setPomodoroMinutes(pomodoroMinutes - 1);
-            setPomodoroSeconds(59);
-          } else {
-            // Timer complete!
-            handleTimerComplete();
-          }
-        }
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPomodoroActive, pomodoroMinutes, pomodoroSeconds]);
-
-  const handleTimerComplete = () => {
-    setIsPomodoroActive(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    // Play sound notification
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.8);
-    } catch (e) {}
-
-    showToast(
-      pomodoroMode === "work"
-        ? "Great job! Pomodoro session completed! Time for a break."
-        : "Break complete! Ready to start the next session?",
-      "success"
-    );
-
-    if (pomodoroMode === "work") {
-      setCompletedPomodoroDuration(25); // assume 25 mins completed
-      setIsPomodoroLogOpen(true); // Open study logging prefill prompt!
-      
-      // Auto switch to break mode
-      setPomodoroMode("break");
-      setPomodoroMinutes(5);
-      setPomodoroSeconds(0);
-    } else {
-      setPomodoroMode("work");
-      setPomodoroMinutes(25);
-      setPomodoroSeconds(0);
-    }
-  };
-
-  const handleToggleTimer = () => {
-    setIsPomodoroActive(!isPomodoroActive);
-  };
-
-  const handleResetTimer = () => {
-    setIsPomodoroActive(false);
-    setPomodoroMinutes(pomodoroMode === "work" ? 25 : 5);
-    setPomodoroSeconds(0);
-  };
-
-  const handleSetTimerMode = (mode: "work" | "break") => {
-    setIsPomodoroActive(false);
-    setPomodoroMode(mode);
-    setPomodoroMinutes(mode === "work" ? 25 : 5);
-    setPomodoroSeconds(0);
-  };
-
   const skillLookupMap = useMemo(() => {
     const map = new Map<string, Skill>();
     skills.forEach((s) => map.set(s.id, s));
@@ -397,29 +335,87 @@ export default function TodayPage() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       
-      {/* Welcome Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Welcome Banner & Date Navigator */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl shadow-xs">
         <div>
-          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-widest">{dailyMetrics.dateHeader}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+              {formattedSelectedDate}
+            </span>
+            {!isSelectedDateToday && (
+              <span className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded-full">
+                Scheduled View
+              </span>
+            )}
+          </div>
           <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 mt-0.5">
             Hello, {user?.displayName?.split(" ")[0] || "Learner"}!
           </h2>
-          <p className="text-sm text-zinc-550 dark:text-zinc-450 leading-none mt-1">
-            "What should I study today?" Answer it in one click below.
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            {isSelectedDateToday
+              ? "Plan and execute your learning goals for today."
+              : `Viewing learning plan scheduled for ${selectedDateStr}.`}
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setAvailableTimeInput(userSettings.weeklyGoalHours ? Math.round((userSettings.weeklyGoalHours * 60) / 5) : 90);
-            setSuggestedItems([]);
-            setIsSuggesterOpen(true);
-          }}
-          className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-md shadow-indigo-500/20 active:scale-[0.98] cursor-pointer shrink-0"
-        >
-          <Sliders className="h-4.5 w-4.5" />
-          Capacity Planner
-        </button>
+        {/* Date Selector & Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Date Navigator Bar */}
+          <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1">
+            <button
+              onClick={() => navigateDay(-1)}
+              title="Previous Day"
+              className="p-1.5 rounded-lg hover:bg-zinc-200/50 dark:hover:bg-zinc-850 text-zinc-500 cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <input
+              type="date"
+              value={selectedDateStr}
+              onChange={(e) => e.target.value && setSelectedDateStr(e.target.value)}
+              className="h-7 px-2 border-0 bg-transparent text-xs font-bold text-zinc-800 dark:text-zinc-200 focus:outline-hidden cursor-pointer"
+            />
+
+            <button
+              onClick={() => navigateDay(1)}
+              title="Next Day"
+              className="p-1.5 rounded-lg hover:bg-zinc-200/50 dark:hover:bg-zinc-850 text-zinc-500 cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {!isSelectedDateToday && (
+              <button
+                onClick={() => setSelectedDateStr(todayStr)}
+                className="px-2 py-1 rounded-lg bg-indigo-600 text-white font-extrabold text-[10px] cursor-pointer hover:bg-indigo-500"
+              >
+                Today
+              </button>
+            )}
+          </div>
+
+          {/* Action Triggers */}
+          <button
+            onClick={() => setIsScheduleModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95 transition-all"
+          >
+            <Calendar className="h-4 w-4" />
+            Schedule Future Study
+          </button>
+
+          <button
+            onClick={() => {
+              setAvailableTimeInput(userSettings.weeklyGoalHours ? Math.round((userSettings.weeklyGoalHours * 60) / 5) : 90);
+              setSuggestedItems([]);
+              setIsSuggesterOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300 font-bold text-xs cursor-pointer transition-all"
+          >
+            <Sliders className="h-4 w-4 text-indigo-500" />
+            Capacity Planner
+          </button>
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -458,13 +454,10 @@ export default function TodayPage() {
 
       </div>
 
-      {/* Main Grid: Plan checklist & Pomodoro Timer */}
-      <div className="grid gap-6 md:grid-cols-3">
+      {/* Main Study Plan Checklist */}
+      <div className="space-y-4">
         
-        {/* Planner list checklist */}
-        <div className="md:col-span-2 space-y-4">
-          
-          {/* Motivation Quote panel */}
+        {/* Motivation Quote panel */}
           <div className="p-4 bg-indigo-50/40 border border-indigo-100/50 dark:bg-indigo-950/10 dark:border-indigo-900/20 rounded-2xl">
             <p className="text-xs italic text-indigo-700 dark:text-indigo-300 leading-relaxed font-semibold">
               "{randomQuote.text}"
@@ -612,76 +605,6 @@ export default function TodayPage() {
               </button>
             </div>
           )}
-        </div>
-
-        {/* Pomodoro Timer widget block */}
-        <div className="space-y-4">
-          <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs space-y-5 text-center flex flex-col justify-center min-h-[300px]">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Timer className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              <h3 className="text-xs font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-widest">
-                Pomodoro Focus
-              </h3>
-            </div>
-
-            {/* Mode selection buttons */}
-            <div className="flex gap-2 p-1 bg-zinc-50 dark:bg-zinc-950 rounded-xl max-w-[180px] mx-auto border border-zinc-150 dark:border-zinc-850">
-              <button
-                onClick={() => handleSetTimerMode("work")}
-                className={cn(
-                  "flex-1 text-[10px] font-bold py-1.5 px-3 rounded-lg cursor-pointer transition-all",
-                  pomodoroMode === "work"
-                    ? "bg-white text-indigo-600 dark:bg-zinc-800 dark:text-indigo-400 shadow-3xs"
-                    : "text-zinc-400"
-                )}
-              >
-                Work
-              </button>
-              <button
-                onClick={() => handleSetTimerMode("break")}
-                className={cn(
-                  "flex-1 text-[10px] font-bold py-1.5 px-3 rounded-lg cursor-pointer transition-all",
-                  pomodoroMode === "break"
-                    ? "bg-white text-indigo-600 dark:bg-zinc-800 dark:text-indigo-400 shadow-3xs"
-                    : "text-zinc-400"
-                )}
-              >
-                Break
-              </button>
-            </div>
-
-            {/* Timer Counter */}
-            <div className="space-y-1">
-              <div className="text-4xl sm:text-5xl font-black text-zinc-800 dark:text-zinc-100 tracking-tight tabular-nums">
-                {String(pomodoroMinutes).padStart(2, "0")}:{String(pomodoroSeconds).padStart(2, "0")}
-              </div>
-              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wider">
-                {pomodoroMode === "work" ? "Focus Session" : "Short Break"}
-              </p>
-            </div>
-
-            {/* Controls */}
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={handleToggleTimer}
-                className={cn(
-                  "flex h-10 w-24 items-center justify-center gap-1.5 rounded-xl font-bold text-xs text-white shadow-xs cursor-pointer active:scale-95 transition-all",
-                  isPomodoroActive ? "bg-amber-600 hover:bg-amber-500" : "bg-indigo-600 hover:bg-indigo-500"
-                )}
-              >
-                {isPomodoroActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {isPomodoroActive ? "Pause" : "Start"}
-              </button>
-              <button
-                onClick={handleResetTimer}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 cursor-pointer"
-              >
-                <RotateCcw className="h-4.5 w-4.5 text-zinc-450" />
-              </button>
-            </div>
-          </div>
-        </div>
-
       </div>
 
       {/* 1. CAPACITY PLANNER DIALOG MODAL */}
@@ -903,24 +826,12 @@ export default function TodayPage() {
       </Dialog>
 
       {/* 3. POMODORO LOG STUDY SESSION DIALOG */}
-      <SessionFormModal
-        open={isPomodoroLogOpen}
-        onClose={() => setIsPomodoroLogOpen(false)}
-        onSubmit={async (values) => {
-          if (!user) return;
-          try {
-            const { createLearningSession } = await import("@/services/learning-sessions");
-            await createLearningSession(user.uid, values);
-            showToast("Logged Pomodoro study session successfully!", "success");
-            setIsPomodoroLogOpen(false);
-          } catch (e) {
-            showToast("Failed to save session.", "error");
-          }
-        }}
+      {/* 3. SCHEDULE LEARNING MODAL */}
+      <ScheduleLearningModal
+        open={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        initialDate={selectedDateStr}
         skills={skills}
-        session={null}
-        prefilledSkillId={skills.length > 0 ? skills[0].id : ""}
-        prefilledTopic="Completed Focus Pomodoro Cycle"
       />
 
     </div>

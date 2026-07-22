@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Home,
   LayoutDashboard,
   GraduationCap,
   Clock,
@@ -28,9 +29,9 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
   const pathname = usePathname();
 
   const menuItems = [
+    { name: "Home", href: "/dashboard", icon: Home },
     { name: "Today", href: "/today", icon: Sun },
     { name: "Tasks", href: "/tasks", icon: ListTodo },
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Skills", href: "/skills", icon: GraduationCap },
     { name: "Learning Sessions", href: "/learning-sessions", icon: Clock },
     { name: "Notes", href: "/notes", icon: Notebook },
@@ -46,9 +47,9 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
     <div className="flex h-full flex-col justify-between bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 transition-all duration-300">
       <div>
         {/* Brand Header */}
-        <div className={cn("flex h-16 items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800", collapsed ? "justify-center" : "")}>
-          <Link href="/dashboard" className="flex items-center gap-2 font-bold tracking-tight">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-indigo-500/20 shadow-md">
+        <div className={cn("flex h-16 items-center justify-between px-3.5 border-b border-zinc-200 dark:border-zinc-800", collapsed ? "px-2" : "")}>
+          <Link href="/dashboard" className="flex items-center gap-2 font-bold tracking-tight" title="Skill Tracker">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-indigo-500/20 shadow-md shrink-0">
               <Sparkles className="h-5 w-5 animate-pulse" />
             </div>
             {!collapsed && (
@@ -58,15 +59,15 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
             )}
           </Link>
           
-          {/* Desktop Toggle Button */}
-          {!collapsed && (
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="hidden md:flex h-6 w-6 items-center justify-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
-            >
-              <ChevronLeft className="h-4.5 w-4.5" />
-            </button>
-          )}
+          {/* Desktop Toggle Button - Always Visible */}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="hidden md:flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-300 transition-colors cursor-pointer shrink-0"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
 
         {/* Navigation Items */}
@@ -87,7 +88,7 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
                 )}
                 title={collapsed ? item.name : undefined}
               >
-                <Icon className={cn("h-5 w-5", isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-500 dark:text-zinc-400")} />
+                <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-500 dark:text-zinc-400")} />
                 {!collapsed && <span>{item.name}</span>}
               </Link>
             );
@@ -96,16 +97,18 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
       </div>
 
       {/* Footer / Toggle for collapsed state */}
-      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex justify-center">
         {collapsed ? (
           <button
             onClick={() => setCollapsed(false)}
-            className="hidden md:flex w-full h-9 items-center justify-center rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900"
+            className="hidden md:flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400 transition-all cursor-pointer"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            <ChevronRight className="h-5 w-5 text-zinc-500" />
+            <ChevronRight className="h-4.5 w-4.5" />
           </button>
         ) : (
-          <div className="flex flex-col gap-1 text-xs text-zinc-400 dark:text-zinc-500 px-3">
+          <div className="flex flex-col gap-1 text-xs text-zinc-400 dark:text-zinc-500 px-1 w-full">
             <p className="font-semibold">Skill Tracker v1.0</p>
             <p>© 2026 Personal App</p>
           </div>

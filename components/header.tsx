@@ -17,7 +17,7 @@ export function Header({ setMobileOpen }: HeaderProps) {
     const segment = path.split("/").filter(Boolean)[0] || "dashboard";
     switch (segment) {
       case "dashboard":
-        return "Dashboard";
+        return "Home";
       case "skills":
         return "My Skills";
       case "learning-sessions":
@@ -32,7 +32,7 @@ export function Header({ setMobileOpen }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 bg-white/80 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80 md:px-6">
+    <header className="sticky top-0 z-30 shrink-0 flex h-16 w-full items-center justify-between border-b border-zinc-200 bg-white/80 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80 md:px-6">
       <div className="flex items-center gap-4">
         {/* Mobile Hamburger Menu Button */}
         <button

@@ -44,7 +44,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-300">
+    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-300">
       {/* Sidebar Navigation */}
       <Sidebar
         collapsed={sidebarCollapsed}
@@ -54,7 +54,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       />
 
       {/* Main Container Wrapper */}
-      <div className="flex flex-1 flex-col overflow-x-hidden min-h-screen">
+      <div className="flex flex-1 flex-col h-full overflow-hidden">
         {/* Header Section */}
         <Header setMobileOpen={setMobileSidebarOpen} />
 

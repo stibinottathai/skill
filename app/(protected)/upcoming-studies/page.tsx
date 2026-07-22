@@ -5,9 +5,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/context/toast-context";
 import { subscribeAllDailyPlans, updateDailyPlanItem, deleteDailyPlanItem } from "@/services/planner";
 import { subscribeSkills } from "@/services/skills";
-import { DailyPlanItem, DailyPlanStatus } from "@/types/planner";
+import { DailyPlanItem, DailyPlanStatus, DailyPlanPriority } from "@/types/planner";
 import { Skill } from "@/types/skill";
 import { ScheduleLearningModal } from "@/components/planner/schedule-learning-modal";
+import { EditScheduledStudyModal } from "@/components/planner/edit-scheduled-study-modal";
+import { EditRecurringSeriesModal } from "@/components/planner/edit-recurring-series-modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   CalendarDays,
   Search,
@@ -20,12 +23,38 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Flame,
   Calendar,
   Layers,
+  Repeat,
+  Edit2,
 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeStringToAMPM } from "@/lib/utils";
+
+export type UpcomingStudyGroup =
+  | {
+      type: "single";
+      id: string;
+      plan: DailyPlanItem;
+    }
+  | {
+      type: "recurring_group";
+      id: string;
+      title: string;
+      skillId: string;
+      startTime: string;
+      estimatedDuration: number;
+      priority: DailyPlanPriority;
+      notes: string;
+      startDate: string;
+      endDate: string;
+      totalDays: number;
+      completedCount: number;
+      items: DailyPlanItem[];
+    };
 
 export default function UpcomingStudiesPage() {
   const { user } = useAuth();
@@ -39,7 +68,7 @@ export default function UpcomingStudiesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSkillId, setSelectedSkillId] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState<"all" | "Pending" | "Completed">("all");
-  const [timeframe, setTimeframe] = useState<"all" | "today" | "week" | "month">("all");
+  const [timeframe, setTimeframe] = useState<"all" | "today" | "recurring" | "week" | "month">("all");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,6 +76,19 @@ export default function UpcomingStudiesPage() {
 
   // Modal state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState<DailyPlanItem | null>(null);
+  const [editGroupItems, setEditGroupItems] = useState<DailyPlanItem[]>([]);
+
+  // Confirm-delete state
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: "single" | "series";
+    id?: string;
+    title: string;
+    items?: DailyPlanItem[];
+  } | null>(null);
+
+  // Expanded recurring groups state
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   // Subscriptions
   useEffect(() => {
@@ -84,8 +126,19 @@ export default function UpcomingStudiesPage() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // Filtered Upcoming Plans
-  const filteredPlans = useMemo(() => {
+  // Format short date (e.g. Jul 22)
+  const formatShortDate = (dateStr: string) => {
+    try {
+      const parts = dateStr.split("-").map(Number);
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  // Filtered Plans Raw
+  const filteredRawPlans = useMemo(() => {
     // 1. Keep plans date >= todayStr
     let result = allPlans.filter((p) => p.date >= todayStr);
 
@@ -112,6 +165,8 @@ export default function UpcomingStudiesPage() {
     // 5. Timeframe filter
     if (timeframe === "today") {
       result = result.filter((p) => p.date === todayStr);
+    } else if (timeframe === "recurring") {
+      result = result.filter((p) => p.isRecurringDaily);
     } else if (timeframe === "week") {
       const nextWeekDate = new Date();
       nextWeekDate.setDate(nextWeekDate.getDate() + 7);
@@ -130,13 +185,59 @@ export default function UpcomingStudiesPage() {
       result = result.filter((p) => p.date <= monthLimitStr);
     }
 
-    // Sort chronologically ascending by date, then start time
-    return result.sort((a, b) => {
-      const dateDiff = a.date.localeCompare(b.date);
-      if (dateDiff !== 0) return dateDiff;
-      return (a.startTime || "").localeCompare(b.startTime || "");
-    });
+    return result;
   }, [allPlans, todayStr, searchQuery, selectedSkillId, selectedStatus, timeframe]);
+
+  // Group recurring items into unified series tiles
+  const groupedStudyTiles = useMemo(() => {
+    const groups: UpcomingStudyGroup[] = [];
+    const recurringMap = new Map<string, DailyPlanItem[]>();
+
+    filteredRawPlans.forEach((plan) => {
+      if (plan.isRecurringDaily) {
+        const groupKey = `${plan.skillId}__${plan.title.trim().toLowerCase()}__${plan.startTime}`;
+        if (!recurringMap.has(groupKey)) {
+          recurringMap.set(groupKey, []);
+        }
+        recurringMap.get(groupKey)!.push(plan);
+      } else {
+        groups.push({
+          type: "single",
+          id: plan.id,
+          plan,
+        });
+      }
+    });
+
+    recurringMap.forEach((items, key) => {
+      items.sort((a, b) => a.date.localeCompare(b.date));
+      const first = items[0];
+      const last = items[items.length - 1];
+      const completedCount = items.filter((i) => i.status === "Completed").length;
+
+      groups.push({
+        type: "recurring_group",
+        id: key,
+        title: first.title,
+        skillId: first.skillId,
+        startTime: first.startTime,
+        estimatedDuration: first.estimatedDuration,
+        priority: first.priority,
+        notes: first.notes,
+        startDate: first.date,
+        endDate: last.date,
+        totalDays: items.length,
+        completedCount,
+        items,
+      });
+    });
+
+    return groups.sort((a, b) => {
+      const dateA = a.type === "single" ? a.plan.date : a.startDate;
+      const dateB = b.type === "single" ? b.plan.date : b.startDate;
+      return dateA.localeCompare(dateB);
+    });
+  }, [filteredRawPlans]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -144,16 +245,25 @@ export default function UpcomingStudiesPage() {
   }, [searchQuery, selectedSkillId, selectedStatus, timeframe]);
 
   // Paginated Results
-  const totalPages = Math.max(1, Math.ceil(filteredPlans.length / ITEMS_PER_PAGE));
-  const paginatedPlans = useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(groupedStudyTiles.length / ITEMS_PER_PAGE));
+  const paginatedGroups = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredPlans.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredPlans, currentPage]);
+    return groupedStudyTiles.slice(start, start + ITEMS_PER_PAGE);
+  }, [groupedStudyTiles, currentPage]);
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
     const totalUpcoming = allPlans.filter((p) => p.date >= todayStr).length;
     const todayCount = allPlans.filter((p) => p.date === todayStr).length;
+    
+    // Count unique recurring daily series
+    const recurringSeriesSet = new Set(
+      allPlans
+        .filter((p) => p.date >= todayStr && p.isRecurringDaily)
+        .map((p) => `${p.skillId}__${p.title.trim().toLowerCase()}__${p.startTime}`)
+    );
+    const recurringSeriesCount = recurringSeriesSet.size;
+
     const totalMins = allPlans
       .filter((p) => p.date >= todayStr)
       .reduce((acc, curr) => acc + (curr.estimatedDuration || 0), 0);
@@ -162,7 +272,7 @@ export default function UpcomingStudiesPage() {
       (p) => p.date >= todayStr && (p.priority === "High" || p.priority === "Critical")
     ).length;
 
-    return { totalUpcoming, todayCount, totalHours, highPriority };
+    return { totalUpcoming, todayCount, recurringSeriesCount, totalHours, highPriority };
   }, [allPlans, todayStr]);
 
   // Actions
@@ -182,13 +292,36 @@ export default function UpcomingStudiesPage() {
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
+  const handleDeleteSingle = (id: string, title: string) => {
+    setConfirmDelete({ type: "single", id, title });
+  };
+
+  const handleDeleteGroupSeries = (items: DailyPlanItem[], title: string) => {
+    setConfirmDelete({ type: "series", title, items });
+  };
+
+  const executeDelete = async () => {
+    if (!confirmDelete) return;
     try {
-      await deleteDailyPlanItem(id);
-      showToast(`Removed "${title}" from schedule.`, "success");
-    } catch (e) {
-      showToast("Failed to delete session.", "error");
+      if (confirmDelete.type === "single" && confirmDelete.id) {
+        await deleteDailyPlanItem(confirmDelete.id);
+        showToast(`Removed "${confirmDelete.title}" from schedule.`, "success");
+      } else if (confirmDelete.type === "series" && confirmDelete.items) {
+        await Promise.all(confirmDelete.items.map((i) => deleteDailyPlanItem(i.id)));
+        showToast(`Removed recurring series "${confirmDelete.title}" (${confirmDelete.items.length} days).`, "success");
+      }
+    } catch {
+      showToast("Failed to delete. Please try again.", "error");
+    } finally {
+      setConfirmDelete(null);
     }
+  };
+
+  const toggleGroupExpand = (id: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
   };
 
   if (loading) {
@@ -250,9 +383,10 @@ export default function UpcomingStudiesPage() {
         </div>
 
         <div className="p-4.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs">
-          <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider block">Planned Time</span>
-          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block leading-none">
-            {metrics.totalHours} hrs
+          <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider block">Recurring Daily Series</span>
+          <span className="text-2xl font-black text-violet-600 dark:text-violet-400 mt-1 block leading-none flex items-center gap-1.5">
+            <Repeat className="h-5 w-5 text-violet-500" />
+            {metrics.recurringSeriesCount} active
           </span>
         </div>
 
@@ -272,6 +406,7 @@ export default function UpcomingStudiesPage() {
           {[
             { id: "all", label: "All Upcoming" },
             { id: "today", label: "Today" },
+            { id: "recurring", label: "🔁 Daily Recurring Series" },
             { id: "week", label: "Next 7 Days" },
             { id: "month", label: "Next 30 Days" },
           ].map((tab) => (
@@ -334,13 +469,161 @@ export default function UpcomingStudiesPage() {
 
       </div>
 
-      {/* Paginated Study Sessions List / Grid */}
-      {paginatedPlans.length > 0 ? (
+      {/* Paginated Study Session Tiles */}
+      {paginatedGroups.length > 0 ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {paginatedPlans.map((plan) => {
+            {paginatedGroups.map((group) => {
+              if (group.type === "recurring_group") {
+                const skill = skillMap.get(group.skillId);
+                const todayItem = group.items.find((i) => i.date === todayStr);
+
+                return (
+                  <div
+                    key={group.id}
+                    className="p-4 bg-white dark:bg-zinc-900 border border-violet-200 dark:border-violet-900/40 rounded-2xl shadow-xs space-y-3 transition-all flex flex-col justify-between"
+                  >
+                    <div className="space-y-2.5">
+                      {/* Header Badges */}
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[9px] font-extrabold px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 flex items-center gap-1 border border-violet-200 dark:border-violet-800">
+                            <Repeat className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+                            Everyday {group.startTime ? `@ ${formatTimeStringToAMPM(group.startTime)}` : ""}
+                          </span>
+
+                          <span className="text-[9px] font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded-full">
+                            {group.totalDays} Days Series ({formatShortDate(group.startDate)} – {formatShortDate(group.endDate)})
+                          </span>
+                        </div>
+
+                        <span className={cn(
+                          "text-[8px] font-bold px-2 py-0.5 rounded shrink-0",
+                          group.priority === "Critical" && "bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400",
+                          group.priority === "High" && "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400",
+                          group.priority === "Medium" && "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-400",
+                          group.priority === "Low" && "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                        )}>
+                          {group.priority} Priority
+                        </span>
+                      </div>
+
+                      {/* Title & Skill */}
+                      <div>
+                        {skill && (
+                          <span className="text-[10px] font-extrabold block mb-0.5" style={{ color: skill.color }}>
+                            {skill.name} ({skill.category})
+                          </span>
+                        )}
+                        <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-50 leading-snug">
+                          {group.title}
+                        </h4>
+                      </div>
+
+                      {/* Progress Bar for the Recurring Series */}
+                      <div className="space-y-1 bg-zinc-50 dark:bg-zinc-955 p-2.5 rounded-xl border border-zinc-150 dark:border-zinc-850">
+                        <div className="flex justify-between items-center text-[10px] font-bold">
+                          <span className="text-zinc-500 dark:text-zinc-400">Series Completion</span>
+                          <span className="text-indigo-600 dark:text-indigo-400">
+                            {group.completedCount} of {group.totalDays} days completed ({Math.round((group.completedCount / group.totalDays) * 100)}%)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-600 dark:bg-indigo-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.round((group.completedCount / group.totalDays) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Today's Quick Action */}
+                      {todayItem && (
+                        <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 flex items-center justify-between text-xs">
+                          <span className="font-bold text-indigo-900 dark:text-indigo-200 text-[11px]">
+                            Today's Session: {todayItem.status}
+                          </span>
+                          <button
+                            onClick={() => handleToggleStatus(todayItem)}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-[10px] shadow-2xs cursor-pointer"
+                          >
+                            {todayItem.status === "Completed" ? "✓ Completed" : "Mark Today Done"}
+                          </button>
+                        </div>
+                      )}
+
+                      {group.notes && (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium bg-zinc-50 dark:bg-zinc-955 p-2.5 rounded-xl border border-zinc-150 dark:border-zinc-850/80">
+                          {group.notes}
+                        </p>
+                      )}
+                    </div>
+
+                      {/* Footer Actions */}
+                      <div className="space-y-2 pt-3 border-t border-zinc-100 dark:border-zinc-850">
+                        <div className="flex items-center justify-between text-xs">
+                          <button
+                            onClick={() => toggleGroupExpand(group.id)}
+                            className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
+                          >
+                            <span>{expandedGroups[group.id] ? "Hide Daily Dates" : `View All ${group.totalDays} Days`}</span>
+                            {expandedGroups[group.id] ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEditGroupItems(group.items)}
+                              className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800 text-zinc-500 hover:text-violet-600 transition-colors cursor-pointer text-[10px] font-bold flex items-center gap-1"
+                              title="Edit all sessions in this series"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              <span>Edit Series</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteGroupSeries(group.items, group.title)}
+                              className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 transition-colors cursor-pointer text-[10px] font-bold flex items-center gap-1"
+                              title="Delete entire recurring schedule series"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Delete Series</span>
+                            </button>
+                          </div>
+                        </div>
+
+                      {/* Expanded list of days */}
+                      {expandedGroups[group.id] && (
+                        <div className="pt-2 space-y-1.5 max-h-48 overflow-y-auto border-t border-zinc-100 dark:border-zinc-850 pr-1">
+                          {group.items.map((item) => (
+                            <div key={item.id} className="p-2 bg-zinc-50 dark:bg-zinc-955 rounded-lg flex items-center justify-between text-xs border border-zinc-200/50 dark:border-zinc-800/50">
+                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                {item.date === todayStr ? "Today" : item.date}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setEditItem(item)}
+                                  className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 cursor-pointer"
+                                  title="Edit this session"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleToggleStatus(item)}
+                                  className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                                >
+                                  {item.status === "Completed" ? "✓ Completed" : "Mark Done"}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Single Plan Tile Rendering
+              const plan = group.plan;
               const skill = skillMap.get(plan.skillId);
-              const skillColor = skill?.color || "#6366f1";
               const isTodayPlan = plan.date === todayStr;
               const isCompleted = plan.status === "Completed";
 
@@ -375,7 +658,7 @@ export default function UpcomingStudiesPage() {
                         {plan.startTime && (
                           <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-zinc-50 dark:bg-zinc-950 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
                             <Clock className="h-3 w-3" />
-                            {plan.startTime}
+                            {formatTimeStringToAMPM(plan.startTime)}
                           </span>
                         )}
                       </div>
@@ -394,7 +677,7 @@ export default function UpcomingStudiesPage() {
                     {/* Skill Pill & Title */}
                     <div>
                       {skill && (
-                        <span className="text-[10px] font-extrabold block mb-0.5" style={{ color: skillColor }}>
+                        <span className="text-[10px] font-extrabold block mb-0.5" style={{ color: skill.color || "#6366f1" }}>
                           {skill.name} ({skill.category})
                         </span>
                       )}
@@ -406,7 +689,7 @@ export default function UpcomingStudiesPage() {
                       </h4>
                     </div>
 
-                    {/* Duration & Notes */}
+                    {/* Duration */}
                     <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                       <span className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5 text-zinc-400" />
@@ -435,13 +718,22 @@ export default function UpcomingStudiesPage() {
                       <span>{isCompleted ? "Completed" : "Mark Done"}</span>
                     </button>
 
-                    <button
-                      onClick={() => handleDelete(plan.id, plan.title)}
-                      className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 transition-colors cursor-pointer"
-                      title="Delete scheduled study"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditItem(plan)}
+                        className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800 text-zinc-500 hover:text-indigo-600 transition-colors cursor-pointer"
+                        title="Edit scheduled study"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSingle(plan.id, plan.title)}
+                        className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 transition-colors cursor-pointer"
+                        title="Delete scheduled study"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -452,7 +744,7 @@ export default function UpcomingStudiesPage() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs">
             <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
               Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{" "}
-              {Math.min(currentPage * ITEMS_PER_PAGE, filteredPlans.length)} of {filteredPlans.length} scheduled studies
+              {Math.min(currentPage * ITEMS_PER_PAGE, groupedStudyTiles.length)} of {groupedStudyTiles.length} study schedule tiles
             </span>
 
             <div className="flex items-center gap-2">
@@ -508,6 +800,40 @@ export default function UpcomingStudiesPage() {
         open={isScheduleModalOpen}
         onClose={() => setIsScheduleModalOpen(false)}
         skills={skills}
+      />
+
+      {/* Edit Scheduled Study Modal */}
+      <EditScheduledStudyModal
+        open={editItem !== null}
+        onClose={() => setEditItem(null)}
+        item={editItem}
+        skills={skills}
+      />
+
+      {/* Edit Recurring Series Modal */}
+      <EditRecurringSeriesModal
+        open={editGroupItems.length > 0}
+        onClose={() => setEditGroupItems([])}
+        items={editGroupItems}
+        skills={skills}
+      />
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={
+          confirmDelete?.type === "series"
+            ? "Delete Recurring Series?"
+            : "Delete Scheduled Study?"
+        }
+        message={
+          confirmDelete?.type === "series"
+            ? `This will permanently remove all ${confirmDelete?.items?.length ?? 0} sessions in the "${confirmDelete?.title}" series. This cannot be undone.`
+            : `"${confirmDelete?.title}" will be permanently removed from your schedule. This cannot be undone.`
+        }
+        confirmLabel={confirmDelete?.type === "series" ? "Delete Series" : "Delete"}
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDelete(null)}
       />
 
     </div>

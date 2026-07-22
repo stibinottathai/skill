@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Skill } from "@/types/skill";
-import { Edit2, Archive, ArchiveRestore, Trash2, Calendar, BookOpen } from "lucide-react";
+import { Edit2, Archive, ArchiveRestore, Trash2, Calendar, BookOpen, ChevronRight, Clock } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,12 +87,16 @@ export function SkillCard({ skill, onEdit, onDelete, onArchiveToggle }: SkillCar
       )}
     >
       <div className="space-y-4">
-        {/* Card Header Info */}
+        
+        {/* Card Header Info as Link */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <Link
+            href={`/skills/${skill.id}`}
+            className="group/title flex items-center gap-3 min-w-0"
+          >
             {/* Colored Icon Wrapper */}
             <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-105"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover/title:scale-105"
               style={{
                 backgroundColor: `${skill.color || "#6366f1"}15`,
                 color: skill.color || "#6366f1",
@@ -99,15 +104,15 @@ export function SkillCard({ skill, onEdit, onDelete, onArchiveToggle }: SkillCar
             >
               <IconComponent className="h-5 w-5" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 tracking-tight leading-tight line-clamp-1">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 tracking-tight leading-tight line-clamp-1 group-hover/title:text-indigo-600 dark:group-hover/title:text-indigo-400 transition-colors">
                 {skill.name}
               </h3>
               <p className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5">
                 {skill.category}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Skill Description */}
@@ -120,6 +125,18 @@ export function SkillCard({ skill, onEdit, onDelete, onArchiveToggle }: SkillCar
             No description provided.
           </p>
         )}
+
+        {/* View Roadmap Banner Link */}
+        <Link
+          href={`/skills/${skill.id}`}
+          className="flex items-center justify-between px-3.5 py-2.5 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 dark:border-indigo-900/40 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300 transition-all group/btn cursor-pointer"
+        >
+          <span className="flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            View Complete Roadmap
+          </span>
+          <ChevronRight className="h-4 w-4 text-indigo-500 transition-transform group-hover/btn:translate-x-1" />
+        </Link>
 
         {/* Level Badges */}
         <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -172,7 +189,7 @@ export function SkillCard({ skill, onEdit, onDelete, onArchiveToggle }: SkillCar
       <div className="flex items-center justify-between mt-5 pt-3.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <LucideIcons.Clock className="h-3 w-3 text-zinc-400" />
+            <Clock className="h-3 w-3 text-zinc-400" />
             {skill.estimatedHours} hrs
           </span>
           <span className="flex items-center gap-1">

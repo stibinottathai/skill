@@ -33,6 +33,7 @@ function formatFirestoreDoc(docSnap: any): DailyPlanItem {
     status: data.status || "Pending",
     startTime: data.startTime || "",
     endTime: data.endTime || "",
+    isRecurringDaily: data.isRecurringDaily ?? false,
     createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
   };

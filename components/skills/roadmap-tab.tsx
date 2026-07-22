@@ -10,6 +10,7 @@ import {
   deleteRoadmapItem,
   reorderRoadmapItems,
 } from "@/services/roadmap";
+import { updateSkill } from "@/services/skills";
 import { RoadmapItem, RoadmapDifficulty, RoadmapStatus } from "@/types/roadmap";
 import { Skill } from "@/types/skill";
 import { LearningSession } from "@/types/session";
@@ -112,6 +113,18 @@ export function RoadmapTab({ skill, sessions }: RoadmapTabProps) {
 
     return () => unsubscribe();
   }, [user, skill.id]);
+
+  // Sync overall skill progress in Firestore whenever roadmap items change
+  useEffect(() => {
+    if (!skill.id || roadmapItems.length === 0) return;
+    const total = roadmapItems.length;
+    const completed = roadmapItems.filter((i) => i.status === "Completed").length;
+    const calculatedProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    if (skill.progress !== calculatedProgress) {
+      updateSkill(skill.id, { progress: calculatedProgress }).catch(console.error);
+    }
+  }, [roadmapItems, skill.id, skill.progress]);
 
   // Sync Form when selectedItem changes
   useEffect(() => {

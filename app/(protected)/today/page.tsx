@@ -39,11 +39,12 @@ import {
   ChevronRight,
   PlusCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeStringToAMPM, calculateEndTimeFromStart, timeStringToMinutes } from "@/lib/utils";
 import * as LucideIcons from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { TimePicker } from "@/components/ui/time-picker";
 
 const planItemSchema = z.object({
   title: z.string().min(1, "Plan title is required"),
@@ -83,12 +84,40 @@ export default function TodayPage() {
   };
   const todayStr = getTodayString();
 
+  // Current time in 12-hour AM/PM format for minTime validation
+  const getNowTimeString = () => {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const period = h >= 12 ? "PM" : "AM";
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    const mStr = String(m).padStart(2, "0");
+    return `${h12}:${mStr} ${period}`;
+  };
+
+  // Current time + 1 hour in 12-hour AM/PM format for default start time
+  const getOneHourLaterTimeString = () => {
+    const now = new Date();
+    const later = new Date(now.getTime() + 60 * 60 * 1000);
+    const h = later.getHours();
+    const m = later.getMinutes();
+    const period = h >= 12 ? "PM" : "AM";
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    // Round minutes down to nearest 5 for a clean default
+    const mRounded = Math.floor(m / 5) * 5;
+    const mStr = String(mRounded).padStart(2, "0");
+    return `${h12}:${mStr} ${period}`;
+  };
+
   // Form setup
   const {
     register,
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<PlanItemFormValues>({
     resolver: zodResolver(planItemSchema),
@@ -102,6 +131,19 @@ export default function TodayPage() {
       skillId: "",
     },
   });
+
+  const startTimeWatch = watch("startTime");
+  const durationWatch = watch("estimatedDuration");
+
+  // Auto calculate endTime when startTime or duration changes
+  useEffect(() => {
+    if (startTimeWatch && durationWatch) {
+      const computedEnd = calculateEndTimeFromStart(startTimeWatch, durationWatch);
+      if (computedEnd) {
+        setValue("endTime", computedEnd);
+      }
+    }
+  }, [startTimeWatch, durationWatch, setValue]);
 
   // Selected date state (defaults to today)
   const [selectedDateStr, setSelectedDateStr] = useState<string>(getTodayString());
@@ -233,14 +275,28 @@ export default function TodayPage() {
 
   const handleFormSubmit = async (values: PlanItemFormValues) => {
     if (!user) return;
+
+    // Block saving a new plan item with a past start time on today's date
+    if (!selectedPlanItem && values.startTime && selectedDateStr === todayStr) {
+      const nowMins = (() => {
+        const now = new Date();
+        return now.getHours() * 60 + now.getMinutes();
+      })();
+      const startMins = timeStringToMinutes(values.startTime);
+      if (startMins !== null && startMins < nowMins) {
+        showToast("Start time cannot be in the past. Please pick a future time.", "error");
+        return;
+      }
+    }
+
     try {
       const sanitizedItem = {
         title: values.title,
         estimatedDuration: values.estimatedDuration,
         priority: values.priority,
         notes: values.notes || "",
-        startTime: values.startTime || "",
-        endTime: values.endTime || "",
+        startTime: formatTimeStringToAMPM(values.startTime),
+        endTime: formatTimeStringToAMPM(values.endTime),
         skillId: values.skillId,
       };
 
@@ -399,6 +455,15 @@ export default function TodayPage() {
             <button
               onClick={() => {
                 setSelectedPlanItem(null);
+                reset({
+                  title: "",
+                  estimatedDuration: 30,
+                  priority: "Medium",
+                  notes: "",
+                  startTime: getOneHourLaterTimeString(),
+                  endTime: "",
+                  skillId: skills[0]?.id || "",
+                });
                 setIsEditOpen(true);
               }}
               className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 cursor-pointer"
@@ -519,6 +584,15 @@ export default function TodayPage() {
               <button
                 onClick={() => {
                   setSelectedPlanItem(null);
+                  reset({
+                    title: "",
+                    estimatedDuration: 30,
+                    priority: "Medium",
+                    notes: "",
+                    startTime: getOneHourLaterTimeString(),
+                    endTime: "",
+                    skillId: skills[0]?.id || "",
+                  });
                   setIsEditOpen(true);
                 }}
                 className="flex items-center justify-center gap-2 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer"
@@ -541,7 +615,8 @@ export default function TodayPage() {
         description="Manual task or study roadmap item target."
         className="max-w-md"
       >
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col">
+        <div className="space-y-4 pt-2 overflow-y-auto max-h-[70vh] pr-1">
           
           {/* Skill Link select */}
           <div className="space-y-1">
@@ -577,15 +652,23 @@ export default function TodayPage() {
           <div className="grid grid-cols-2 gap-4">
             {/* Duration */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">Est. Duration (Mins) *</label>
-              <input
-                type="number"
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">Est. Duration *</label>
+              <select
                 {...register("estimatedDuration", { valueAsNumber: true })}
                 className={cn(
-                  "w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-sm dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden",
+                  "w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden cursor-pointer",
                   errors.estimatedDuration && "border-red-500"
                 )}
-              />
+              >
+                <option value={15}>15 Mins</option>
+                <option value={30}>30 Mins</option>
+                <option value={45}>45 Mins</option>
+                <option value={60}>1 Hour</option>
+                <option value={90}>1.5 Hours (1 hr 30 mins)</option>
+                <option value={120}>2 Hours</option>
+                <option value={180}>3 Hours</option>
+                <option value={240}>4 Hours</option>
+              </select>
               {errors.estimatedDuration && (
                 <p className="text-[10px] font-bold text-red-500">{errors.estimatedDuration.message}</p>
               )}
@@ -620,25 +703,33 @@ export default function TodayPage() {
             {/* Start time */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">Start Time</label>
-              <input
-                type="time"
-                {...register("startTime")}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
+              <TimePicker
+                value={watch("startTime")}
+                onChange={(val) => setValue("startTime", val, { shouldValidate: true })}
+                minTime={!selectedPlanItem ? getNowTimeString() : undefined}
               />
+              {errors.startTime && <p className="text-[10px] font-bold text-red-500">{errors.startTime.message}</p>}
+              {!selectedPlanItem && (
+                <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Past times are disabled</p>
+              )}
             </div>
             {/* End time */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">End Time</label>
-              <input
-                type="time"
-                {...register("endTime")}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
-              />
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">End Time (Auto-calculated)</label>
+              <div className="h-10 px-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-950 flex items-center justify-between">
+                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                  {watch("endTime") || "Auto-calculated"}
+                </span>
+                <span className="text-[9px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider bg-zinc-200/50 dark:bg-zinc-850 px-1.5 py-0.5 rounded">
+                  Auto
+                </span>
+              </div>
             </div>
           </div>
+        </div>{/* end scrollable area */}
 
-          {/* Action buttons */}
-          <div className="flex justify-end gap-2.5 pt-4 border-t border-zinc-200 dark:border-zinc-800 mt-6">
+          {/* Action buttons - sticky at bottom */}
+          <div className="flex justify-end gap-2.5 pt-4 border-t border-zinc-200 dark:border-zinc-800 mt-4 shrink-0">
             <button
               type="button"
               onClick={() => {

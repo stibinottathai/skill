@@ -14,6 +14,7 @@ export interface DailyPlanItem {
   status: DailyPlanStatus;
   startTime: string;
   endTime: string;
+  isRecurringDaily?: boolean;
   createdAt: string;
   updatedAt: string;
 }

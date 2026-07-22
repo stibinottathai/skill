@@ -13,20 +13,49 @@ import { Calendar as CalendarIcon, Clock, BookOpen, Sparkles, CheckCircle2, Repe
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { formatTimeStringToAMPM, calculateEndTimeFromStart, timeStringToMinutes } from "@/lib/utils";
+import { TimePicker } from "@/components/ui/time-picker";
 
-const scheduleSchema = z.object({
-  date: z.string().min(1, "Target date is required"),
-  skillId: z.string().min(1, "Linked skill is required"),
-  roadmapItemId: z.string().optional(),
-  title: z.string().min(1, "Study topic or title is required"),
-  estimatedDuration: z.number().min(1, "Duration must be at least 1 minute"),
-  priority: z.enum(["Low", "Medium", "High", "Critical"] as const),
-  notes: z.string().optional(),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  isRecurringDaily: z.boolean().optional(),
-  recurringDaysCount: z.number().optional(),
-});
+const scheduleSchema = z
+  .object({
+    date: z.string().min(1, "Target date is required"),
+    skillId: z.string().min(1, "Linked skill is required"),
+    roadmapItemId: z.string().optional(),
+    title: z.string().optional(),
+    estimatedDuration: z.number().min(1, "Duration must be at least 1 minute"),
+    priority: z.enum(["Low", "Medium", "High", "Critical"] as const),
+    notes: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    isRecurringDaily: z.boolean().optional(),
+    recurringDaysCount: z.number().optional(),
+  })
+  .refine(
+    (data) => {
+      if (!data.isRecurringDaily) {
+        return !!data.title && data.title.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Study topic or title is required for single date sessions",
+      path: ["title"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.date) return true;
+      // Date must be tomorrow or later
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selected = new Date(data.date + "T00:00:00");
+      return selected > today;
+    },
+    {
+      message: "You can only schedule from tomorrow onwards",
+      path: ["date"],
+    }
+  );
 
 type ScheduleFormValues = z.infer<typeof scheduleSchema>;
 
@@ -59,7 +88,18 @@ export function ScheduleLearningModal({
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const defaultDateStr = initialDate || getTodayString();
+  const getTomorrowString = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const yyyy = tomorrow.getFullYear();
+    const mm = String(tomorrow.getMonth() + 1).padStart(2, "0");
+    const dd = String(tomorrow.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Default date is tomorrow (future scheduling only)
+  const tomorrowStr = getTomorrowString();
+  const defaultDateStr = (initialDate && initialDate > getTodayString()) ? initialDate : tomorrowStr;
 
   const {
     register,
@@ -89,10 +129,12 @@ export function ScheduleLearningModal({
   const selectedDate = watch("date");
   const isRecurringDaily = watch("isRecurringDaily");
 
-  // Sync default date when initialDate changes
+  // Sync default date when initialDate changes — only accept future dates
   useEffect(() => {
-    if (initialDate) {
+    if (initialDate && initialDate > getTodayString()) {
       setValue("date", initialDate);
+    } else {
+      setValue("date", tomorrowStr);
     }
   }, [initialDate, setValue]);
 
@@ -102,6 +144,19 @@ export function ScheduleLearningModal({
       setValue("skillId", skills[0].id);
     }
   }, [skills, setValue, watch]);
+
+  const startTime = watch("startTime");
+  const estimatedDuration = watch("estimatedDuration");
+
+  // Auto calculate endTime when startTime or duration changes
+  useEffect(() => {
+    if (startTime && estimatedDuration) {
+      const computedEnd = calculateEndTimeFromStart(startTime, estimatedDuration);
+      if (computedEnd) {
+        setValue("endTime", computedEnd);
+      }
+    }
+  }, [startTime, estimatedDuration, setValue]);
 
   // Load incomplete roadmap items when selectedSkillId changes
   useEffect(() => {
@@ -146,6 +201,13 @@ export function ScheduleLearningModal({
     if (!user) return;
     setSubmitting(true);
 
+    const selectedSkill = skills.find((s) => s.id === values.skillId);
+    const defaultSkillTitle = selectedSkill ? `Daily ${selectedSkill.name} Study` : "Daily Study Session";
+    const finalTitle = values.title?.trim() || defaultSkillTitle;
+
+    const formattedStartTime = formatTimeStringToAMPM(values.startTime);
+    const formattedEndTime = formatTimeStringToAMPM(values.endTime);
+
     try {
       if (values.isRecurringDaily) {
         const daysToSchedule = values.recurringDaysCount || 30;
@@ -165,20 +227,21 @@ export function ScheduleLearningModal({
               date: dateStr,
               skillId: values.skillId,
               roadmapItemId: values.roadmapItemId || "",
-              title: values.title,
+              title: finalTitle,
               estimatedDuration: values.estimatedDuration,
               priority: values.priority,
               notes: values.notes || "",
               status: "Pending",
-              startTime: values.startTime || "",
-              endTime: values.endTime || "",
+              startTime: formattedStartTime,
+              endTime: formattedEndTime,
+              isRecurringDaily: true,
             })
           );
         }
 
         await Promise.all(promises);
         showToast(
-          `Automatically scheduled "${values.title}" daily for the next ${daysToSchedule} days!`,
+          `Automatically scheduled "${finalTitle}" daily for the next ${daysToSchedule} days!`,
           "success"
         );
       } else {
@@ -186,13 +249,13 @@ export function ScheduleLearningModal({
           date: values.date,
           skillId: values.skillId,
           roadmapItemId: values.roadmapItemId || "",
-          title: values.title,
+          title: finalTitle,
           estimatedDuration: values.estimatedDuration,
           priority: values.priority,
           notes: values.notes || "",
           status: "Pending",
-          startTime: values.startTime || "",
-          endTime: values.endTime || "",
+          startTime: formattedStartTime,
+          endTime: formattedEndTime,
         });
 
         const formattedDate = new Date(values.date + "T00:00:00").toLocaleDateString(undefined, {
@@ -200,7 +263,7 @@ export function ScheduleLearningModal({
           day: "numeric",
         });
 
-        showToast(`Scheduled "${values.title}" for ${formattedDate}!`, "success");
+        showToast(`Scheduled "${finalTitle}" for ${formattedDate}!`, "success");
       }
 
       onScheduled?.();
@@ -233,9 +296,11 @@ export function ScheduleLearningModal({
           <input
             type="date"
             {...register("date")}
+            min={tomorrowStr}
             className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
           />
           {errors.date && <p className="text-[10px] font-bold text-red-500">{errors.date.message}</p>}
+          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Scheduling available from tomorrow onwards</p>
         </div>
 
         {/* Linked Skill Selector */}
@@ -286,11 +351,15 @@ export function ScheduleLearningModal({
         {/* Title / Topic input */}
         <div className="space-y-1">
           <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-            Study Topic / Title *
+            Study Topic / Title {isRecurringDaily ? "(Optional for Daily Schedule)" : "*"}
           </label>
           <input
             type="text"
-            placeholder="e.g. JavaScript Arrays & Async Functions"
+            placeholder={
+              isRecurringDaily
+                ? `Defaults to "Daily ${skills.find((s) => s.id === selectedSkillId)?.name || "Skill"} Study"`
+                : "e.g. JavaScript Arrays & Async Functions"
+            }
             {...register("title")}
             className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-semibold focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
           />
@@ -304,11 +373,19 @@ export function ScheduleLearningModal({
               <Clock className="h-3.5 w-3.5 text-zinc-400" />
               Duration (Mins) *
             </label>
-            <input
-              type="number"
+            <select
               {...register("estimatedDuration", { valueAsNumber: true })}
-              className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
-            />
+              className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 cursor-pointer"
+            >
+              <option value={15}>15 Mins</option>
+              <option value={30}>30 Mins</option>
+              <option value={45}>45 Mins</option>
+              <option value={60}>1 Hour</option>
+              <option value={90}>1.5 Hours (1 hr 30 mins)</option>
+              <option value={120}>2 Hours</option>
+              <option value={180}>3 Hours</option>
+              <option value={240}>4 Hours</option>
+            </select>
             {errors.estimatedDuration && <p className="text-[10px] font-bold text-red-500">{errors.estimatedDuration.message}</p>}
           </div>
 
@@ -329,20 +406,23 @@ export function ScheduleLearningModal({
         {/* Target Time optional inputs */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Start Time (e.g. 11:00 AM)</label>
-            <input
-              type="time"
-              {...register("startTime")}
-              className="w-full h-9 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-medium focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Start Time</label>
+            <TimePicker
+              value={watch("startTime")}
+              onChange={(val) => setValue("startTime", val, { shouldValidate: true })}
             />
+            {errors.startTime && <p className="text-[10px] font-bold text-red-500">{errors.startTime.message}</p>}
           </div>
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">End Time (Optional)</label>
-            <input
-              type="time"
-              {...register("endTime")}
-              className="w-full h-9 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-medium focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
-            />
+            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">End Time (Auto-calculated)</label>
+            <div className="h-10 px-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-950 flex items-center justify-between">
+              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                {watch("endTime") || "Auto-calculated"}
+              </span>
+              <span className="text-[9px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider bg-zinc-200/50 dark:bg-zinc-850 px-1.5 py-0.5 rounded">
+                Auto
+              </span>
+            </div>
           </div>
         </div>
 

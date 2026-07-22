@@ -25,18 +25,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const ALLOWED_EMAIL = "stibinaugustine3047@gmail.com";
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser && currentUser.email?.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
-        // Force sign out immediately
-        await signOut(auth);
-        setUser(null);
-      } else {
-        setUser(currentUser);
-      }
+    // Safety fallback timeout to prevent infinite loading state if Firebase Auth hangs
+    const timeout = setTimeout(() => {
       setLoading(false);
-    });
+    }, 4000);
 
-    return () => unsubscribe();
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (currentUser) => {
+        clearTimeout(timeout);
+        try {
+          if (currentUser && currentUser.email?.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
+            // Force sign out immediately
+            await signOut(auth);
+            setUser(null);
+          } else {
+            setUser(currentUser);
+          }
+        } catch (err) {
+          console.error("Error in auth state change:", err);
+          setUser(null);
+        } finally {
+          setLoading(false);
+        }
+      },
+      (error) => {
+        clearTimeout(timeout);
+        console.error("Firebase auth listener error:", error);
+        setUser(null);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
 
   const loginWithGoogle = async () => {

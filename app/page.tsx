@@ -31,17 +31,7 @@ export default function RootPage() {
         <div className="h-1 w-24 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
           <div className="h-full w-12 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-infinite-scroll" />
         </div>
-      </div>
-
-      <style jsx global>{`
-        @keyframes infiniteScroll {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
-        }
-        .animate-infinite-scroll {
-          animation: infiniteScroll 1.4s infinite linear;
-        }
-      `}</style>
-    </div>
+      </div>    </div>
   );
 }
+

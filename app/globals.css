@@ -111,3 +111,17 @@
     color: hsl(var(--foreground));
   }
 }
+
+@keyframes infiniteScroll {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-infinite-scroll {
+  animation: infiniteScroll 1.4s infinite linear;
+}
+

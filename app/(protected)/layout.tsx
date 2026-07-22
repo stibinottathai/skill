@@ -34,17 +34,6 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
             <div className="h-full w-12 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-infinite-scroll" />
           </div>
         </div>
-        
-        {/* Style injection for loading slider since Tailwind v4 might need custom config for arbitrary keyframe rules */}
-        <style jsx global>{`
-          @keyframes infiniteScroll {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(200%); }
-          }
-          .animate-infinite-scroll {
-            animation: infiniteScroll 1.4s infinite linear;
-          }
-        `}</style>
       </div>
     );
   }

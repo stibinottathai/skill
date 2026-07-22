@@ -9,7 +9,7 @@ import { Skill } from "@/types/skill";
 import { RoadmapItem } from "@/types/roadmap";
 import { DailyPlanPriority } from "@/types/planner";
 import { Dialog } from "@/components/ui/dialog";
-import { Calendar as CalendarIcon, Clock, BookOpen, Sparkles, CheckCircle2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, BookOpen, Sparkles, CheckCircle2, Repeat } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -24,6 +24,8 @@ const scheduleSchema = z.object({
   notes: z.string().optional(),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
+  isRecurringDaily: z.boolean().optional(),
+  recurringDaysCount: z.number().optional(),
 });
 
 type ScheduleFormValues = z.infer<typeof scheduleSchema>;
@@ -78,11 +80,14 @@ export function ScheduleLearningModal({
       notes: "",
       startTime: "",
       endTime: "",
+      isRecurringDaily: false,
+      recurringDaysCount: 30,
     },
   });
 
   const selectedSkillId = watch("skillId");
   const selectedDate = watch("date");
+  const isRecurringDaily = watch("isRecurringDaily");
 
   // Sync default date when initialDate changes
   useEffect(() => {
@@ -142,25 +147,62 @@ export function ScheduleLearningModal({
     setSubmitting(true);
 
     try {
-      await createDailyPlanItem(user.uid, {
-        date: values.date,
-        skillId: values.skillId,
-        roadmapItemId: values.roadmapItemId || "",
-        title: values.title,
-        estimatedDuration: values.estimatedDuration,
-        priority: values.priority,
-        notes: values.notes || "",
-        status: "Pending",
-        startTime: values.startTime || "",
-        endTime: values.endTime || "",
-      });
+      if (values.isRecurringDaily) {
+        const daysToSchedule = values.recurringDaysCount || 30;
+        const startDate = new Date(values.date + "T00:00:00");
 
-      const formattedDate = new Date(values.date + "T00:00:00").toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      });
+        const promises = [];
+        for (let i = 0; i < daysToSchedule; i++) {
+          const curr = new Date(startDate);
+          curr.setDate(startDate.getDate() + i);
+          const yyyy = curr.getFullYear();
+          const mm = String(curr.getMonth() + 1).padStart(2, "0");
+          const dd = String(curr.getDate()).padStart(2, "0");
+          const dateStr = `${yyyy}-${mm}-${dd}`;
 
-      showToast(`Scheduled "${values.title}" for ${formattedDate}!`, "success");
+          promises.push(
+            createDailyPlanItem(user.uid, {
+              date: dateStr,
+              skillId: values.skillId,
+              roadmapItemId: values.roadmapItemId || "",
+              title: values.title,
+              estimatedDuration: values.estimatedDuration,
+              priority: values.priority,
+              notes: values.notes || "",
+              status: "Pending",
+              startTime: values.startTime || "",
+              endTime: values.endTime || "",
+            })
+          );
+        }
+
+        await Promise.all(promises);
+        showToast(
+          `Automatically scheduled "${values.title}" daily for the next ${daysToSchedule} days!`,
+          "success"
+        );
+      } else {
+        await createDailyPlanItem(user.uid, {
+          date: values.date,
+          skillId: values.skillId,
+          roadmapItemId: values.roadmapItemId || "",
+          title: values.title,
+          estimatedDuration: values.estimatedDuration,
+          priority: values.priority,
+          notes: values.notes || "",
+          status: "Pending",
+          startTime: values.startTime || "",
+          endTime: values.endTime || "",
+        });
+
+        const formattedDate = new Date(values.date + "T00:00:00").toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
+
+        showToast(`Scheduled "${values.title}" for ${formattedDate}!`, "success");
+      }
+
       onScheduled?.();
       onClose();
       reset();
@@ -186,7 +228,7 @@ export function ScheduleLearningModal({
         <div className="space-y-1">
           <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
             <CalendarIcon className="h-3.5 w-3.5 text-indigo-500" />
-            Target Date *
+            Start Date *
           </label>
           <input
             type="date"
@@ -248,7 +290,7 @@ export function ScheduleLearningModal({
           </label>
           <input
             type="text"
-            placeholder="e.g. Next.js App Router Server Actions"
+            placeholder="e.g. JavaScript Arrays & Async Functions"
             {...register("title")}
             className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-semibold focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
           />
@@ -287,7 +329,7 @@ export function ScheduleLearningModal({
         {/* Target Time optional inputs */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Start Time (Optional)</label>
+            <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Start Time (e.g. 11:00 AM)</label>
             <input
               type="time"
               {...register("startTime")}
@@ -302,6 +344,39 @@ export function ScheduleLearningModal({
               className="w-full h-9 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-medium focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
             />
           </div>
+        </div>
+
+        {/* Recurring Daily Option */}
+        <div className="p-3 bg-indigo-50/50 border border-indigo-150 rounded-xl dark:bg-indigo-950/20 dark:border-indigo-900/40 space-y-2">
+          <label className="flex items-center gap-2 text-xs font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              {...register("isRecurringDaily")}
+              className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 cursor-pointer"
+            />
+            <span className="flex items-center gap-1.5">
+              <Repeat className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              Schedule automatically every day at this time
+            </span>
+          </label>
+
+          {isRecurringDaily && (
+            <div className="pt-1.5 flex items-center justify-between gap-3 text-xs border-t border-indigo-100 dark:border-indigo-900/30">
+              <label className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                Repeat duration:
+              </label>
+              <select
+                {...register("recurringDaysCount", { valueAsNumber: true })}
+                className="h-8 px-2 rounded-lg border border-indigo-200 bg-white text-xs font-bold focus:outline-hidden dark:border-indigo-800 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                <option value={7}>Next 7 days (1 week)</option>
+                <option value={14}>Next 14 days (2 weeks)</option>
+                <option value={30}>Next 30 days (1 month)</option>
+                <option value={60}>Next 60 days (2 months)</option>
+                <option value={90}>Next 90 days (3 months)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Notes */}
@@ -334,7 +409,7 @@ export function ScheduleLearningModal({
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            <span>Schedule Session</span>
+            <span>{isRecurringDaily ? "Schedule Daily Sessions" : "Schedule Session"}</span>
           </button>
         </div>
 

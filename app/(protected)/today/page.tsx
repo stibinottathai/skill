@@ -31,7 +31,6 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Sliders,
   CheckSquare,
   AlertCircle,
   Calendar,
@@ -45,17 +44,6 @@ import * as LucideIcons from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-
-// Motivation Quotes List
-const MOTIVATIONAL_QUOTES = [
-  { text: "The only way to learn a new programming language is by writing programs in it.", author: "Dennis Ritchie" },
-  { text: "Make it work, make it right, make it fast.", author: "Kent Beck" },
-  { text: "Before software can be reusable it first has to be usable.", author: "Ralph Johnson" },
-  { text: "Progress is not in enhancing what is, but in advancing toward what will be.", author: "Kahlil Gibran" },
-  { text: "Simplicity is the soul of efficiency.", author: "Austin Freeman" },
-  { text: "Strive for progress, not perfection.", author: "Unknown" },
-  { text: "One concept at a time. Consistency beats intensity.", author: "Developer Rule" },
-];
 
 const planItemSchema = z.object({
   title: z.string().min(1, "Plan title is required"),
@@ -73,23 +61,17 @@ export default function TodayPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [dailyPlan, setDailyPlan] = useState<DailyPlanItem[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [userSettings, setUserSettings] = useState<UserSettings>({
     weeklyGoalHours: 10,
     monthlyGoalHours: 40,
   });
   const [loading, setLoading] = useState(true);
 
-  // Form controls
+  // Form modal state
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedPlanItem, setSelectedPlanItem] = useState<DailyPlanItem | null>(null);
-
-  // Capacity suggester modal state
-  const [isSuggesterOpen, setIsSuggesterOpen] = useState(false);
-  const [availableTimeInput, setAvailableTimeInput] = useState(90); // default 90 mins capacity
-  const [suggestedItems, setSuggestedItems] = useState<Omit<DailyPlanItem, "id" | "userId" | "createdAt" | "updatedAt">[]>([]);
-  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
 
   // Get current date string representation (YYYY-MM-DD)
   const getTodayString = () => {
@@ -100,13 +82,6 @@ export default function TodayPage() {
     return `${yyyy}-${mm}-${dd}`;
   };
   const todayStr = getTodayString();
-
-  // Quote of the day
-  const randomQuote = useMemo(() => {
-    // Deterministic selection based on day number
-    const day = new Date().getDate();
-    return MOTIVATIONAL_QUOTES[day % MOTIVATIONAL_QUOTES.length];
-  }, []);
 
   // Form setup
   const {
@@ -296,36 +271,6 @@ export default function TodayPage() {
     }
   };
 
-  // Capacity Suggestion Actions
-  const handleTriggerSuggester = async () => {
-    if (!user) return;
-    setIsGeneratingSuggestions(true);
-    try {
-      const suggestions = await generateDailyPlanSuggestions(user.uid, todayStr, availableTimeInput);
-      setSuggestedItems(suggestions);
-      if (suggestions.length === 0) {
-        showToast("No suggested roadmap items fit inside this capacity.", "info");
-      }
-    } catch (e) {
-      showToast("Error generating plan.", "error");
-    } finally {
-      setIsGeneratingSuggestions(false);
-    }
-  };
-
-  const handleSaveSuggestedPlan = async () => {
-    if (!user || suggestedItems.length === 0) return;
-    try {
-      const batchPromises = suggestedItems.map((item) => createDailyPlanItem(user.uid, item));
-      await Promise.all(batchPromises);
-      showToast(`Added ${suggestedItems.length} topics to today's plan!`, "success");
-      setIsSuggesterOpen(false);
-      setSuggestedItems([]);
-    } catch (e) {
-      showToast("Failed to save plan.", "error");
-    }
-  };
-
   const skillLookupMap = useMemo(() => {
     const map = new Map<string, Skill>();
     skills.forEach((s) => map.set(s.id, s));
@@ -403,18 +348,6 @@ export default function TodayPage() {
             <Calendar className="h-4 w-4" />
             Schedule Future Study
           </button>
-
-          <button
-            onClick={() => {
-              setAvailableTimeInput(userSettings.weeklyGoalHours ? Math.round((userSettings.weeklyGoalHours * 60) / 5) : 90);
-              setSuggestedItems([]);
-              setIsSuggesterOpen(true);
-            }}
-            className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300 font-bold text-xs cursor-pointer transition-all"
-          >
-            <Sliders className="h-4 w-4 text-indigo-500" />
-            Capacity Planner
-          </button>
         </div>
       </div>
 
@@ -457,16 +390,6 @@ export default function TodayPage() {
       {/* Main Study Plan Checklist */}
       <div className="space-y-4">
         
-        {/* Motivation Quote panel */}
-          <div className="p-4 bg-indigo-50/40 border border-indigo-100/50 dark:bg-indigo-950/10 dark:border-indigo-900/20 rounded-2xl">
-            <p className="text-xs italic text-indigo-700 dark:text-indigo-300 leading-relaxed font-semibold">
-              "{randomQuote.text}"
-            </p>
-            <p className="text-[10px] text-indigo-450 dark:text-indigo-500 font-bold mt-1 text-right">
-              — {randomQuote.author}
-            </p>
-          </div>
-
           {/* Heading */}
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
@@ -607,93 +530,7 @@ export default function TodayPage() {
           )}
       </div>
 
-      {/* 1. CAPACITY PLANNER DIALOG MODAL */}
-      <Dialog
-        open={isSuggesterOpen}
-        onClose={() => setIsSuggesterOpen(false)}
-        title="Daily Capacity Planner"
-        description="Auto suggest daily study sessions based on roadmap targets."
-        className="max-w-lg"
-      >
-        <div className="space-y-4 pt-2">
-          
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">
-              Available Study Time Today (Minutes)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={availableTimeInput}
-                onChange={(e) => setAvailableTimeInput(Number(e.target.value))}
-                className="w-full max-w-[120px] h-9 px-3 rounded-lg border border-zinc-200 text-xs focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 font-bold"
-              />
-              <button
-                onClick={handleTriggerSuggester}
-                disabled={isGeneratingSuggestions}
-                className="flex items-center justify-center gap-1 px-4 h-9 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs disabled:opacity-50 cursor-pointer"
-              >
-                Suggest Roadmap Steps
-              </button>
-            </div>
-          </div>
-
-          <div className="my-2 h-px bg-zinc-150 dark:bg-zinc-800" />
-
-          {/* Suggestions List */}
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-            {suggestedItems.length > 0 ? (
-              suggestedItems.map((item, idx) => {
-                const skill = skillLookupMap.get(item.skillId);
-                return (
-                  <div key={idx} className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block truncate">{item.title}</span>
-                      <span className="text-[9px] font-semibold text-zinc-450 dark:text-zinc-500 block">
-                        Estimated: {item.estimatedDuration} mins • Priority: {item.priority}
-                      </span>
-                    </div>
-                    
-                    {/* Inline remove option */}
-                    <button
-                      onClick={() => setSuggestedItems(suggestedItems.filter((_, i) => i !== idx))}
-                      className="text-red-500 hover:text-red-700 text-xs cursor-pointer font-bold"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-zinc-400 italic text-center py-6">
-                {isGeneratingSuggestions ? "Querying roadmap steps..." : "No suggestions compiled yet."}
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-4 border-t border-zinc-200 dark:border-zinc-800 mt-6">
-            <button
-              onClick={() => {
-                setIsSuggesterOpen(false);
-                setSuggestedItems([]);
-              }}
-              className="px-4 py-2 border border-zinc-200 hover:bg-zinc-50 rounded-xl text-xs font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveSuggestedPlan}
-              disabled={suggestedItems.length === 0}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50 cursor-pointer"
-            >
-              Save Daily Plan
-            </button>
-          </div>
-
-        </div>
-      </Dialog>
-
-      {/* 2. MANUAL PLAN ITEM FORM DIALOG */}
+      {/* 1. MANUAL PLAN ITEM FORM DIALOG */}
       <Dialog
         open={isEditOpen}
         onClose={() => {
@@ -782,22 +619,20 @@ export default function TodayPage() {
           <div className="grid grid-cols-2 gap-4">
             {/* Start time */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">Start Time (Optional)</label>
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">Start Time</label>
               <input
-                type="text"
+                type="time"
                 {...register("startTime")}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-sm dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
-                placeholder="e.g. 10:00 AM"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
               />
             </div>
             {/* End time */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">End Time (Optional)</label>
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">End Time</label>
               <input
-                type="text"
+                type="time"
                 {...register("endTime")}
-                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-sm dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
-                placeholder="e.g. 11:30 AM"
+                className="w-full h-10 px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold dark:border-zinc-800 dark:bg-zinc-950 focus:outline-hidden"
               />
             </div>
           </div>

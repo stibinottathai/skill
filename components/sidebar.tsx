@@ -14,6 +14,7 @@ import {
   Sparkles,
   Sun,
   ListTodo,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -31,10 +32,11 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
   const menuItems = [
     { name: "Home", href: "/dashboard", icon: Home },
     { name: "Today", href: "/today", icon: Sun },
-    { name: "Tasks", href: "/tasks", icon: ListTodo },
+    { name: "Upcoming Studies", href: "/upcoming-studies", icon: CalendarDays },
     { name: "Skills", href: "/skills", icon: GraduationCap },
     { name: "Learning Sessions", href: "/learning-sessions", icon: Clock },
     { name: "Notes", href: "/notes", icon: Notebook },
+    { name: "Tasks", href: "/tasks", icon: ListTodo },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 

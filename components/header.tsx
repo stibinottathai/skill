@@ -18,6 +18,8 @@ export function Header({ setMobileOpen }: HeaderProps) {
     switch (segment) {
       case "dashboard":
         return "Home";
+      case "upcoming-studies":
+        return "Upcoming Studies";
       case "skills":
         return "My Skills";
       case "learning-sessions":

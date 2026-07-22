@@ -5,14 +5,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { subscribeSkills } from "@/services/skills";
 import { subscribeLearningSessions } from "@/services/learning-sessions";
 import { subscribeUserSettings } from "@/services/settings";
+import { subscribeAllDailyPlans } from "@/services/planner";
 import { Skill } from "@/types/skill";
 import { LearningSession } from "@/types/session";
 import { UserSettings } from "@/types/settings";
 import { LearningTask } from "@/types/task";
 import { RoadmapItem } from "@/types/roadmap";
+import { DailyPlanItem } from "@/types/planner";
 import { subscribeTasks } from "@/services/tasks";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { ScheduleLearningModal } from "@/components/planner/schedule-learning-modal";
 
 // Icon imports
 import {
@@ -24,11 +27,13 @@ import {
   Flame,
   Calendar,
   Layers,
+  ChevronLeft,
   ChevronRight,
   TrendingUp,
   BrainCircuit,
   Eye,
   ListTodo,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import * as LucideIcons from "lucide-react";
@@ -64,6 +69,10 @@ export default function DashboardPage() {
   // Planner and Tasks states
   const [tasks, setTasks] = useState<LearningTask[]>([]);
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>([]);
+  const [allDailyPlans, setAllDailyPlans] = useState<DailyPlanItem[]>([]);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const UPCOMING_ITEMS_PER_PAGE = 4;
 
   // Subscriptions
   useEffect(() => {
@@ -88,6 +97,10 @@ export default function DashboardPage() {
       setTasks(fetchedTasks);
     });
 
+    const unsubscribePlans = subscribeAllDailyPlans(user.uid, (fetchedPlans) => {
+      setAllDailyPlans(fetchedPlans);
+    });
+
     // Real-time listener for all roadmap items across skills
     const roadmapQ = query(collection(db, "roadmap_items"), where("userId", "==", user.uid));
     const unsubscribeRoadmap = onSnapshot(roadmapQ, (snap) => {
@@ -103,9 +116,31 @@ export default function DashboardPage() {
       unsubscribeSessions();
       unsubscribeSettings();
       unsubscribeTasks();
+      unsubscribePlans();
       unsubscribeRoadmap();
     };
   }, [user]);
+
+  // Upcoming Scheduled Studies logic
+  const todayStr = useMemo(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const upcomingPlans = useMemo(() => {
+    return allDailyPlans
+      .filter((p) => p.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [allDailyPlans, todayStr]);
+
+  const totalUpcomingPages = Math.max(1, Math.ceil(upcomingPlans.length / UPCOMING_ITEMS_PER_PAGE));
+  const paginatedUpcomingPlans = useMemo(() => {
+    const startIndex = (upcomingPage - 1) * UPCOMING_ITEMS_PER_PAGE;
+    return upcomingPlans.slice(startIndex, startIndex + UPCOMING_ITEMS_PER_PAGE);
+  }, [upcomingPlans, upcomingPage]);
 
   // Skill lookup map
   const skillMap = useMemo(() => {
@@ -312,37 +347,46 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       
-      {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-violet-600 p-6 sm:p-8 text-white shadow-md shadow-indigo-500/25">
-        <div className="relative z-10 space-y-2">
-          <span className="inline-block px-2.5 py-1 rounded-full bg-white/10 text-xs font-semibold backdrop-blur-xs">
-            📊 Learning Console
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Welcome back, {user?.displayName?.split(" ")[0] || "Learner"}!
-          </h2>
-          <p className="text-indigo-100 text-sm sm:text-base max-w-md leading-relaxed">
-            Configure target study goals, review chart habit metrics, and check Neglected Skills to lock down your focus.
-          </p>
-          <div className="pt-3 flex flex-wrap gap-3">
+      {/* Welcome Banner - Compact & Modern */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-650 to-violet-600 p-4 sm:p-5 text-white shadow-xs">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <span className="inline-block px-2 py-0.5 rounded-md bg-white/15 text-[10px] font-bold backdrop-blur-xs tracking-wide">
+              📊 Learning Console
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+              Welcome back, {user?.displayName?.split(" ")[0] || "Learner"}!
+            </h2>
+            <p className="text-indigo-100 text-xs max-w-xl leading-normal">
+              Track study goals, analyze habit metrics, and schedule your upcoming learning steps.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-1 md:pt-0">
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-indigo-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all duration-200 shadow-xs cursor-pointer active:scale-95"
+            >
+              <Calendar className="h-3.5 w-3.5 text-indigo-600" />
+              Schedule Study
+            </button>
             <Link
               href="/learning-sessions"
-              className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 hover:bg-zinc-50 rounded-xl text-sm font-semibold transition-all duration-200 shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/30 text-white hover:bg-indigo-500/40 rounded-xl text-xs font-bold transition-all duration-200 border border-white/15 cursor-pointer"
             >
-              <Play className="h-4 w-4 fill-indigo-600 text-indigo-600 animate-pulse" />
+              <Play className="h-3.5 w-3.5 fill-white text-white" />
               Start Study Log
             </Link>
             <Link
               href="/skills"
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500/30 text-white hover:bg-indigo-500/40 rounded-xl text-sm font-semibold transition-all duration-200 border border-white/10 cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 bg-indigo-500/30 text-white hover:bg-indigo-500/40 rounded-xl text-xs font-bold transition-all duration-200 border border-white/15 cursor-pointer"
             >
-              Skills Library
-              <ChevronRight className="h-4 w-4" />
+              Skills
+              <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
-        <div className="absolute right-[-5%] top-[-20%] h-48 w-48 rounded-full bg-white/10 blur-xl pointer-events-none" />
-        <div className="absolute right-[15%] bottom-[-30%] h-36 w-36 rounded-full bg-white/5 blur-lg pointer-events-none" />
+        <div className="absolute right-[-2%] top-[-30%] h-36 w-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
       </div>
 
       {/* Aggregate Stats Row */}
@@ -750,6 +794,13 @@ export default function DashboardPage() {
           </div>
         )}
       </Dialog>
+
+      {/* Schedule Learning Modal */}
+      <ScheduleLearningModal
+        open={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        skills={skills}
+      />
 
     </div>
   );
